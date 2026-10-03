@@ -129,19 +129,11 @@ sub runPlaylist()
             categories.Push({ title: k, count: catMap[k] })
         end for
         
-        ' Print debug info (masking url)
-        safeLogUrl = maskToken(url)
-        print "PlaylistTask: Downloaded from " + safeLogUrl
+        ' Do not expose playlist credentials to the developer console.
+        print "PlaylistTask: Downloaded playlist"
         print "PlaylistTask: Parse duration = " + parseDuration.ToStr() + " ms"
         print "PlaylistTask: Total channels = " + totalChannels.ToStr()
         print "PlaylistTask: Incompatible (.ts/other) = " + incompatibleCount.ToStr()
-        
-        print "PlaylistTask: First ~15 categories:"
-        catLogLimit = 15
-        if categories.Count() < 15 then catLogLimit = categories.Count()
-        for i = 0 to catLogLimit - 1
-            print " - " + categories[i].title + ": " + categories[i].count.ToStr()
-        end for
         
         epoch = CreateObject("roDateTime").AsSeconds()
         
@@ -173,11 +165,11 @@ sub runPlaylist()
         
     else if respCode = 304
         print "PlaylistTask: 304 Not Modified. Loading from cache..."
-        loadFromCache("ok")
+        loadFromCache("ok", url)
         
     else
         print "PlaylistTask: HTTP Error " + respCode.ToStr() + " or empty body. Trying cache..."
-        cacheLoaded = loadFromCache("cache")
+        cacheLoaded = loadFromCache("cache", url)
         if not cacheLoaded
             if respCode = 0
                 m.top.error = "No network, and the cache is empty"
@@ -207,7 +199,11 @@ function fetchUrlBody(url as string) as string
     return ""
 end function
 
-function loadFromCache(statusIfSuccess as string) as boolean
+function loadFromCache(statusIfSuccess as string, expectedUrl as string) as boolean
+    fs = CreateObject("roFileSystem")
+    if not fs.Exists("cachefs:/playlist_meta.json") then return false
+    meta = ParseJson(ReadAsciiFile("cachefs:/playlist_meta.json"))
+    if meta = invalid or meta.sourceUrl <> expectedUrl then return false
     cachedStr = ""
     if CreateObject("roFileSystem").Exists("cachefs:/playlist.json")
         cachedStr = ReadAsciiFile("cachefs:/playlist.json")
@@ -222,19 +218,4 @@ function loadFromCache(statusIfSuccess as string) as boolean
         end if
     end if
     return false
-end function
-
-function maskToken(url as string) as string
-    markers = ["/iptv/", "/uplist/"]
-    for each mk in markers
-        startIdx = url.Instr(mk)
-        if startIdx >= 0
-            segStart = startIdx + mk.Len()
-            endIdx = url.Instr(segStart, "/")
-            if endIdx >= 0
-                url = url.Left(segStart) + "***" + url.Mid(endIdx)
-            end if
-        end if
-    end for
-    return url
 end function

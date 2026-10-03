@@ -3,8 +3,6 @@
 sub init()
     m.categoryList = m.top.findNode("categoryList")
     m.channelGrid = m.top.findNode("channelGrid")
-    m.gridCols = m.channelGrid.numColumns
-    if m.gridCols < 1 then m.gridCols = 1
     m.headerLabel = m.top.findNode("headerLabel")
     m.emptyLabel = m.top.findNode("emptyLabel")
     m.toastBg = m.top.findNode("toastBg")
@@ -28,7 +26,7 @@ sub init()
         m.emptyLabel.color = theme.colorTextDim
         m.toastBg.color = theme.colorSurface
         m.toastLabel.color = theme.colorText
-        m.channelGrid.itemSpacing = [theme.spacingUnit, theme.spacingUnit]
+        m.channelGrid.itemSpacing = [0, 6]
     end if
     
     ' Position memory map: categoryIndex -> focused channel index
@@ -36,6 +34,11 @@ sub init()
     m.currentChannels = []
     m.gridCache = {}
     m.channelsCache = {}
+    m.knownChannels = []
+    m.knownChannelUrls = {}
+    m.providerTask = invalid
+    m.providerLoading = false
+    m.providerCategoryIndex = -1
     m.favSet = {}
     m.pendingIdx = -1
     m.currentCategoryIdx = -1
@@ -90,7 +93,8 @@ function headerForCategory(idx as integer) as string
     catIndex = idx - 3
     if res <> invalid and res.categories <> invalid and catIndex >= 0 and catIndex < res.categories.Count()
         cat = res.categories[catIndex]
-        return "CHANNELS — " + cat.title + " (" + cat.count.ToStr() + ")"
+        if cat.count > 0 then return "CHANNELS — " + cat.title + " (" + cat.count.ToStr() + ")"
+        return "CHANNELS — " + cat.title
     end if
     return "CHANNELS"
 end function
@@ -107,9 +111,12 @@ function buildGridForCategory(idx as integer) as object
     channels = []
     if res = invalid then return { content: gridContent, channels: channels }
 
+    availableChannels = res.channels
+    if res.providerMode = true then availableChannels = m.knownChannels
+
     if idx = 1 ' Favorites
-        if res.channels <> invalid
-            for each ch in res.channels
+        if availableChannels <> invalid
+            for each ch in availableChannels
                 if m.favSet[ch.name] <> invalid
                     addChannel(gridContent, ch, true)
                     channels.Push(ch)
@@ -118,9 +125,9 @@ function buildGridForCategory(idx as integer) as object
         end if
     else if idx = 2 ' Recents
         recents = LoadRecents()
-        if recents <> invalid and res.channels <> invalid
+        if recents <> invalid and availableChannels <> invalid
             for each r in recents
-                for each ch in res.channels
+                for each ch in availableChannels
                     if ch.name = r
                         addChannel(gridContent, ch, (m.favSet[ch.name] <> invalid))
                         channels.Push(ch)
@@ -133,8 +140,8 @@ function buildGridForCategory(idx as integer) as object
         catIndex = idx - 3
         if catIndex >= 0 and res.categories <> invalid and catIndex < res.categories.Count()
             cat = res.categories[catIndex]
-            if res.channels <> invalid
-                for each ch in res.channels
+            if availableChannels <> invalid
+                for each ch in availableChannels
                     if cat.title = "All" or ch.group = cat.title
                         addChannel(gridContent, ch, (m.favSet[ch.name] <> invalid))
                         channels.Push(ch)
@@ -150,14 +157,20 @@ sub onPlaylistChange()
     res = m.top.playlistResult
     if res = invalid return
     
-    ' Before migration and the purge, so everything downstream sees the restored
-    ' data on the run that seeds it.
-    RestoreStoreIfEmpty()
-    MigrateStoreToNames(res.channels)
-    PurgeAdultFromRecents(res.channels)
-    ' After migration and purge, so what is printed is exactly what is stored.
-    ' deploy.ps1 captures these lines over port 8085 before every sideload.
-    DumpStore()
+    m.knownChannels = []
+    m.knownChannelUrls = {}
+    m.providerTask = invalid
+    m.providerLoading = false
+    m.providerCategoryIndex = -1
+    if res.channels <> invalid and res.channels.Count() > 0
+        addKnownChannels(res.channels)
+        ' Before migration and the purge, so everything downstream sees the restored
+        ' data on the run that seeds it.
+        RestoreStoreIfEmpty()
+        MigrateStoreToNames(res.channels)
+        PurgeAdultFromRecents(res.channels)
+    end if
+    ' Viewing history stays in the registry; do not print it to the console.
     
     buildCategories()
     clearGridCache()
@@ -190,7 +203,9 @@ sub buildCategories()
     
     if res.categories <> invalid
         for each cat in res.categories
-            addCategory(content, cat.title + " (" + cat.count.ToStr() + ")")
+            title = cat.title
+            if cat.count > 0 then title = title + " (" + cat.count.ToStr() + ")"
+            addCategory(content, title)
         end for
     end if
     
@@ -249,6 +264,22 @@ sub onCategorySelected()
         m.top.openSearch = not m.top.openSearch
     else if m.categoryList.content <> invalid and idx = m.categoryList.content.getChildCount() - 1
         m.top.openSettings = not m.top.openSettings
+    else
+        res = m.top.playlistResult
+        catIndex = idx - 3
+        if res <> invalid and res.providerMode = true and res.categories <> invalid
+            if catIndex >= 0 and catIndex < res.categories.Count()
+                key = idx.ToStr()
+                if m.gridCache.DoesExist(key)
+                    updateGridForCategory(idx)
+                    if m.channelGrid.content <> invalid and m.channelGrid.content.getChildCount() > 0
+                        m.channelGrid.setFocus(true)
+                    end if
+                else
+                    loadProviderCategory(idx, res.categories[catIndex])
+                end if
+            end if
+        end if
     end if
 end sub
 
@@ -265,6 +296,23 @@ sub updateGridForCategory(idx as integer)
         m.emptyLabel.text = "Select to open"
         m.headerLabel.text = "CHANNELS — " + m.categoryList.content.getChild(idx).title
         return
+    end if
+
+    res = m.top.playlistResult
+    if res <> invalid and res.providerMode = true and idx >= 3
+        key = idx.ToStr()
+        if not m.gridCache.DoesExist(key)
+            m.channelGrid.content = CreateObject("roSGNode", "ContentNode")
+            m.currentChannels = []
+            m.emptyLabel.visible = true
+            if m.providerLoading and m.providerCategoryIndex = idx
+                m.emptyLabel.text = "Loading this category…"
+            else
+                m.emptyLabel.text = "Press OK to load this category"
+            end if
+            m.headerLabel.text = headerForCategory(idx)
+            return
+        end if
     end if
 
     key = idx.ToStr()
@@ -291,13 +339,104 @@ sub updateGridForCategory(idx as integer)
     end if
 end sub
 
+sub loadProviderCategory(idx as integer, cat as object)
+    if m.providerLoading
+        showToast("Another category is still loading")
+        return
+    end if
+    if cat = invalid or cat.providerId = invalid or m.top.accountConfig = invalid
+        showToast("Provider account is unavailable")
+        return
+    end if
+
+    m.providerLoading = true
+    m.providerCategoryIndex = idx
+    m.currentCategoryIdx = idx
+    m.channelGrid.content = CreateObject("roSGNode", "ContentNode")
+    m.currentChannels = []
+    m.headerLabel.text = headerForCategory(idx)
+    m.emptyLabel.visible = true
+    m.emptyLabel.text = "Loading " + cat.title + "…"
+
+    m.providerTask = CreateObject("roSGNode", "XtreamTask")
+    m.providerTask.accountConfig = m.top.accountConfig
+    m.providerTask.categoryId = cat.providerId
+    m.providerTask.categoryName = cat.title
+    m.providerTask.playlistUrl = "xtream://configured-account"
+    m.providerTask.observeField("status", "onProviderCategoryStatus")
+    m.providerTask.control = "RUN"
+end sub
+
+sub onProviderCategoryStatus()
+    if m.providerTask = invalid then return
+    status = m.providerTask.status
+    if status <> "ok" and status <> "cache" and status <> "error" then return
+
+    idx = m.providerCategoryIndex
+    if status = "ok" or status = "cache"
+        result = m.providerTask.result
+        if result <> invalid and result.channels <> invalid
+            gridContent = CreateObject("roSGNode", "ContentNode")
+            channels = []
+            for each ch in result.channels
+                addChannel(gridContent, ch, (m.favSet[ch.name] <> invalid))
+                channels.Push(ch)
+            end for
+            key = idx.ToStr()
+            m.gridCache[key] = gridContent
+            m.channelsCache[key] = channels
+            addKnownChannels(channels)
+
+            res = m.top.playlistResult
+            catIndex = idx - 3
+            if res <> invalid and res.categories <> invalid and catIndex >= 0 and catIndex < res.categories.Count()
+                res.categories[catIndex].count = channels.Count()
+                node = m.categoryList.content.getChild(idx)
+                if node <> invalid
+                    node.title = res.categories[catIndex].title + " (" + channels.Count().ToStr() + ")"
+                end if
+            end if
+            m.top.catalogUpdate = { channels: m.knownChannels, newChannels: channels }
+        end if
+    else
+        reason = m.providerTask.error
+        if reason = invalid or reason = "" then reason = "Could not load this category"
+        showToast(reason)
+    end if
+
+    m.providerLoading = false
+    m.providerCategoryIndex = -1
+    m.providerTask = invalid
+    if status = "ok" or status = "cache"
+        updateGridForCategory(idx)
+        if m.channelGrid.content <> invalid and m.channelGrid.content.getChildCount() > 0
+            m.channelGrid.setFocus(true)
+        end if
+    else
+        m.emptyLabel.visible = true
+        m.emptyLabel.text = "Could not load. Press OK to retry"
+    end if
+end sub
+
+sub addKnownChannels(channels as object)
+    if channels = invalid then return
+    for each ch in channels
+        if ch.url <> invalid and not m.knownChannelUrls.DoesExist(ch.url)
+            m.knownChannelUrls[ch.url] = true
+            m.knownChannels.Push(ch)
+        end if
+    end for
+end sub
+
 sub addChannel(parent as object, ch as object, isFav as boolean)
     item = parent.createChild("ChannelContent")
     
     item.name = ch.name
+    item.title = ch.name
     item.url = ch.url
     item.group = ch.group
     item.logo = ch.logo
+    item.HDPosterUrl = ch.logo
     item.compatible = ch.compatible
     item.favorite = isFav
 end sub
@@ -345,13 +484,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
         else if key = "left"
             if m.channelGrid.hasFocus()
                 idx = m.channelGrid.itemFocused
-                if (idx MOD m.gridCols) = 0
-                    catIdx = m.currentCategoryIdx
-                    m.gridFocusMemory[catIdx.ToStr()] = idx
-                    
-                    m.categoryList.setFocus(true)
-                    handled = true
-                end if
+                catIdx = m.currentCategoryIdx
+                m.gridFocusMemory[catIdx.ToStr()] = idx
+                m.categoryList.setFocus(true)
+                handled = true
             end if
         else if key = "options"
             if m.channelGrid.hasFocus()

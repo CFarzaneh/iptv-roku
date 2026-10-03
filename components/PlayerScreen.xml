@@ -4,7 +4,11 @@
     <script type="text/brightscript" uri="pkg:/source/Theme.brs" />
     <script type="text/brightscript" uri="pkg:/source/ChannelStore.brs" />
     <script type="text/brightscript" uri="pkg:/source/Epg.brs" />
+    <script type="text/brightscript" uri="pkg:/source/DashboardModel.brs" />
+    <script type="text/brightscript" uri="pkg:/components/PlayerTelemetry.brs" />
     <interface>
+        <field id="dashboardCommandId" type="string" />
+        <field id="dashboardSnapshot" type="assocarray" alwaysNotify="true" />
         <field id="playlist" type="array" />
         <field id="playCommand" type="boolean" onChange="onPlayCommand" />
         <field id="startIndex" type="integer" />
@@ -12,6 +16,7 @@
     </interface>
     
     <children>
+        <Timer id="telemetryTimer" duration="5" repeat="true" />
         <!-- enableUI="false": this app draws its own player UI (the zap banner, the OK
              overlay with the channel name and clock, the error dialog), and Roku's
              built-in one duplicated all of it, including a white buffering spinner

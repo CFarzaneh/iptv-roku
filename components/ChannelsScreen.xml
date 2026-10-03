@@ -5,6 +5,8 @@
     <script type="text/brightscript" uri="pkg:/source/ChannelStore.brs" />
     <interface>
         <field id="playlistResult" type="assocarray" onChange="onPlaylistChange" />
+        <field id="accountConfig" type="assocarray" />
+        <field id="catalogUpdate" type="assocarray" />
         <field id="playRequest" type="assocarray" />
         <field id="restoreFocus" type="boolean" />
         <field id="openSearch" type="boolean" />
@@ -45,20 +47,21 @@
                width="1270"
                height="40" />
                
-        <!-- Grid on the right -->
-        <!-- The grid draws the focus ring itself, OUTSIDE the item and outside its own
-             clip, so it is the only indicator that reaches all four sides of every cell
-             including the edge columns. Stock is #E7E9E8; 0x57C140 multiplies to #4FB03A
-             exactly. This also matches the brandbook, whose .card.focused is a box-shadow
-             OUTSIDE the card - the card's own inner border was the thing moving away
-             from it. -->
-        <MarkupGrid id="channelGrid"
-                    translation="[530, 114]"
-                    itemComponentName="ChannelCard"
-                    itemSize="[330, 220]"
-                    itemSpacing="[12, 12]"
-                    numColumns="4"
-                    numRows="4"
+        <Label translation="[600, 96]" width="590" height="28"
+               text="CHANNEL" color="0x8A968EFF"
+               font="font:SmallestBoldSystemFont" />
+        <Label translation="[1234, 96]" width="600" height="28"
+               text="NOW / NEXT" color="0x8A968EFF"
+               font="font:SmallestBoldSystemFont" />
+
+        <!-- Twelve readable guide rows fit inside the FHD safe area. MarkupList draws
+             and scrolls only the visible custom rows, keeping large categories cheap. -->
+        <MarkupList id="channelGrid"
+                    translation="[530, 128]"
+                    itemComponentName="ChannelRow"
+                    itemSize="[1356, 64]"
+                    itemSpacing="[0, 6]"
+                    numRows="12"
                     focusBitmapBlendColor="0x57C140FF" />
                     
         <!-- Empty / Not Found Label -->

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ProviderValidationTask" extends="Task">
+  <script type="text/brightscript" uri="pkg:/source/DashboardModel.brs"/>
+  <script type="text/brightscript" uri="pkg:/source/M3uParser.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/tasks/ProviderValidationTask.brs"/>
+  <interface>
+    <field id="candidate" type="assocarray"/>
+    <field id="result" type="assocarray" alwaysNotify="true"/>
+  </interface>
+</component>

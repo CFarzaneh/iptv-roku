@@ -13,8 +13,9 @@ Roku Channel Store.
   streams flagged.
 - **Favorites & Recents** — stored by channel name (survives provider domain/token changes);
   toggle with `*` or long-press OK.
-- **Player** — HLS video with an info overlay, channel zap (▲/▼), a side zapper panel, and
-  an error dialog with retry / next / favorite / back.
+- **Player** — HLS video with an info overlay, channel zap (▲/▼), a side zapper panel,
+  automatic on-device repair for Roku's `Unsupported AAC stream` failure, and an error
+  dialog with retry / next / favorite / back.
 - **Search / Settings / Onboarding** — on-screen keyboard search, editable playlist & EPG
   URLs, cache reset.
 - **EPG** — compact "now/next" guide generated off-device (see [`epg/`](epg/)) and shown on
@@ -30,7 +31,18 @@ components/           SceneGraph components (screens, cards) + tasks/ (async con
 images/               Splash screens and channel/app icons
 epg/                  EPG generator (Python) — see epg/README.md
 .github/workflows/    GitHub Action that regenerates the EPG on a schedule
+control-room/         React dashboard, Node.js relay, tests, and AWS CDK (us-east-2)
 ```
+
+## Website control room
+
+The [control-room application](control-room/README.md) adds one private login for two
+TVs, on-device channel catalogs with existing provider IDs, remote tuning, playback
+metrics, and provider credential replacement. AWS CDK provisions Amplify Hosting,
+Cognito, and a single Lightsail container in `us-east-2`. Software updates are deferred.
+The app's direct playback does not depend on AWS. A personalized, gitignored
+`source/dashboard.json` enables its background connection; without it cloud controls
+remain dormant. Device attestation and playback reporting still require hardware validation.
 
 ## Requirements
 - A Roku device with **Developer Mode** enabled.
@@ -83,13 +95,18 @@ needed; whether your provider serves it is worth checking before settling for `h
    > then check that the first two bytes are `PK` and that `unzip -t` passes.
 2. Open a browser on your PC and go to `http://<ROKU_IP>`.
 3. Enter the username `rokudev` and your Developer Mode password.
-4. Click **Upload**, select the ZIP, then click **Install**.
+4. Click **Upload**, select the ZIP, then click **Install with squashfs**.
 
 ## EPG
-The provider playlist has no embedded guide, and a full XMLTV feed is too large for the TV,
-so the EPG is generated off-device. [`epg/generate_epg.py`](epg/generate_epg.py) builds a
-compact `epg.json`, and a scheduled GitHub Action publishes it to the **`epg-data`** branch;
-the app fetches it from the `epgUrl` above. See [`epg/README.md`](epg/README.md) for details.
+For ordinary M3U configuration, [`epg/generate_epg.py`](epg/generate_epg.py) builds the
+compact `epg.json` format consumed by the app, and a scheduled GitHub Action can publish
+it to the **`epg-data`** branch. See [`epg/README.md`](epg/README.md) for details.
+
+For an Xtream-compatible account configured in `config.json`, the app automatically loads
+short guide listings for channels in categories opened during the current session. This
+avoids downloading a provider XMLTV document that may be too large for Roku memory. A
+nonempty EPG URL saved in Settings overrides automatic mode; saving an empty value restores
+automatic provider EPG.
 
 ## Debugging
 View BrightScript logs and errors over telnet:

@@ -7,5 +7,6 @@
         <field id="logo" type="string" />
         <field id="compatible" type="boolean" />
         <field id="favorite" type="boolean" />
+        <field id="wide" type="boolean" />
     </interface>
 </component>

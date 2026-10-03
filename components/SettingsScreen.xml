@@ -42,24 +42,6 @@
                height="800"
                wrap="true" />
                
-        <!-- Keyboard overlay -->
-        <Rectangle id="keyboardBg"
-                   width="1920" height="1080"
-                   color="0x0E1310E6"
-                   visible="false">
-            <Keyboard id="keyboard" translation="[700, 200]" />
-            <Label id="keyboardHint"
-                   text="Enter a new playlist URL"
-                   translation="[700, 150]"
-                   color="0xECF2EEFF" />
-            <Button id="keyboardOk"
-                    text="Save"
-                    translation="[700, 500]" />
-            <Button id="keyboardCancel"
-                    text="Cancel"
-                    translation="[700, 560]" />
-        </Rectangle>
-
         <!-- Toast -->
         <Rectangle id="toastBg"
                    translation="[460, 950]"

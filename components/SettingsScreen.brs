@@ -4,11 +4,8 @@ sub init()
     m.settingsList = m.top.findNode("settingsList")
     m.headerLabel = m.top.findNode("headerLabel")
     m.infoLabel = m.top.findNode("infoLabel")
-    m.keyboardBg = m.top.findNode("keyboardBg")
-    m.keyboard = m.top.findNode("keyboard")
-    m.keyboardHint = m.top.findNode("keyboardHint")
-    m.keyboardOk = m.top.findNode("keyboardOk")
-    m.keyboardCancel = m.top.findNode("keyboardCancel")
+    m.editDialog = invalid
+    m.editMode = ""
     
     m.toastBg = m.top.findNode("toastBg")
     m.toastLabel = m.top.findNode("toastLabel")
@@ -16,8 +13,6 @@ sub init()
     
     m.settingsList.observeField("itemSelected", "onItemSelected")
     m.settingsList.observeField("itemFocused", "onItemFocused")
-    m.keyboardOk.observeField("buttonSelected", "onKeyboardSave")
-    m.keyboardCancel.observeField("buttonSelected", "onKeyboardCancel")
     m.toastTimer.observeField("fire", "hideToast")
     m.top.observeField("visible", "onVisibleChange")
     m.top.observeField("noticeCommand", "onNotice")
@@ -28,7 +23,6 @@ sub init()
         m.settingsList.color = theme.colorTextDim
         m.settingsList.focusedColor = theme.colorOnAccent
         m.infoLabel.color = theme.colorTextDim
-        m.keyboardHint.color = theme.colorText
         m.toastBg.color = theme.colorSurface
         m.toastLabel.color = theme.colorText
     end if
@@ -50,7 +44,7 @@ sub buildList()
     
     addItem(content, "Playlist URL")
     addItem(content, "Refresh playlist now")
-    addItem(content, "URL EPG")
+    addItem(content, "EPG override URL")
     addItem(content, "Clear cache")
     addItem(content, "About")
     
@@ -76,7 +70,11 @@ sub updateInfo()
     else if idx = 1 ' Refresh
         text = "Force a full playlist reload"
     else if idx = 2 ' EPG
-        if info <> invalid and info.epgUrl <> invalid and info.epgUrl <> ""
+        if info <> invalid and info.epgAutomatic = true
+            text = "Provider EPG: automatic" + chr(10)
+            text = text + "Select to enter an override URL." + chr(10)
+            text = text + "Save an empty value to use automatic mode."
+        else if info <> invalid and info.epgUrl <> invalid and info.epgUrl <> ""
             text = "Current EPG URL:" + chr(10) + info.epgUrl
         else
             text = "EPG URL not set"
@@ -101,6 +99,8 @@ sub updateInfo()
                 text = text + "EPG: " + info.epgCount.ToStr() + " channels"
             else if info.epgFailed <> invalid and info.epgFailed = true then
                 text = text + "EPG: unavailable"
+            else if info.epgAutomatic <> invalid and info.epgAutomatic = true then
+                text = text + "EPG: automatic (waiting for listings)"
             else
                 text = text + "EPG: not set"
             end if
@@ -127,28 +127,22 @@ sub onItemSelected()
     
     if idx = 0 ' URL
         info = m.top.info
+        value = ""
         if info <> invalid and info.playlistUrl <> invalid
-            m.keyboard.text = info.playlistUrl
-        else
-            m.keyboard.text = ""
+            value = info.playlistUrl
         end if
-        m.editMode = "playlist"
-        m.keyboardHint.text = "Enter a new playlist URL"
-        m.keyboardBg.visible = true
-        m.keyboard.setFocus(true)
+        openUrlEditor("playlist", "Enter a new playlist URL", value)
     else if idx = 1 ' Refresh
         sendAction("refresh")
     else if idx = 2 ' EPG
         info = m.top.info
+        value = ""
         if info <> invalid and info.epgUrl <> invalid
-            m.keyboard.text = info.epgUrl
-        else
-            m.keyboard.text = ""
+            value = info.epgUrl
         end if
-        m.editMode = "epg"
-        m.keyboardHint.text = "Enter a new EPG URL"
-        m.keyboardBg.visible = true
-        m.keyboard.setFocus(true)
+        title = "Enter a new EPG URL"
+        if info <> invalid and info.epgAutomatic = true then title = "Override automatic provider EPG"
+        openUrlEditor("epg", title, value)
     else if idx = 3 ' Cache
         fs = CreateObject("roFileSystem")
         if fs.Exists("cachefs:/playlist.json")
@@ -160,6 +154,9 @@ sub onItemSelected()
         if fs.Exists("cachefs:/epg.json")
             fs.Delete("cachefs:/epg.json")
         end if
+        if fs.Exists("cachefs:/xtream_live.json")
+            fs.Delete("cachefs:/xtream_live.json")
+        end if
         showToast("Cache cleared")
         sendAction("clearCache")
     else if idx = 4 ' About
@@ -167,10 +164,35 @@ sub onItemSelected()
     end if
 end sub
 
-sub onKeyboardSave()
-    url = m.keyboard.text
-    m.keyboardBg.visible = false
-    m.settingsList.setFocus(true)
+sub openUrlEditor(mode as string, title as string, value as string)
+    if m.editDialog <> invalid then return
+    dialog = CreateObject("roSGNode", "StandardKeyboardDialog")
+    dialog.title = title
+    dialog.buttons = ["Save", "Cancel"]
+    dialog.text = value
+    dialog.textEditBox.maxTextLength = 4096
+    dialog.textEditBox.voiceEnabled = false
+    dialog.observeField("buttonSelected", "onUrlDialogButton")
+    dialog.observeField("wasClosed", "onUrlDialogClosed")
+    scene = m.top.getScene()
+    if scene = invalid
+        showToast("Could not open the keyboard")
+        return
+    end if
+    m.editMode = mode
+    m.editDialog = dialog
+    scene.dialog = dialog
+end sub
+
+sub onUrlDialogButton(event as object)
+    if m.editDialog = invalid then return
+    if event.getData() <> 0
+        m.editDialog.close = true
+        return
+    end if
+
+    url = m.editDialog.text.Trim()
+    m.editDialog.close = true
     
     sec = CreateObject("roRegistrySection", "settings")
     if m.editMode = "epg"
@@ -186,44 +208,17 @@ sub onKeyboardSave()
     end if
 end sub
 
-sub onKeyboardCancel()
-    m.keyboardBg.visible = false
-    m.settingsList.setFocus(true)
+sub onUrlDialogClosed()
+    m.editDialog = invalid
+    if m.top.visible then m.settingsList.setFocus(true)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    handled = false
-    if press
-        if m.keyboardBg.visible
-            if key = "down"
-                if m.keyboard.hasFocus()
-                    m.keyboardOk.setFocus(true)
-                    handled = true
-                else if m.keyboardOk.hasFocus()
-                    m.keyboardCancel.setFocus(true)
-                    handled = true
-                end if
-            else if key = "up"
-                if m.keyboardCancel.hasFocus()
-                    m.keyboardOk.setFocus(true)
-                    handled = true
-                else if m.keyboardOk.hasFocus()
-                    m.keyboard.setFocus(true)
-                    handled = true
-                end if
-            else if key = "back"
-                m.keyboardBg.visible = false
-                m.settingsList.setFocus(true)
-                handled = true
-            end if
-        else
-            if key = "back"
-                m.top.exitRequested = not m.top.exitRequested
-                handled = true
-            end if
-        end if
+    if press and key = "back" and m.editDialog = invalid
+        m.top.exitRequested = not m.top.exitRequested
+        return true
     end if
-    return handled
+    return false
 end function
 
 ' The only place allowed to write m.top.action. Sets the payload first, then toggles

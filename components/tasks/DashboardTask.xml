@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="DashboardTask" extends="Task">
+  <script type="text/brightscript" uri="pkg:/source/DashboardModel.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/tasks/DashboardTask.brs"/>
+  <interface>
+    <field id="snapshot" type="assocarray" alwaysNotify="true"/>
+    <field id="outgoing" type="assocarray" alwaysNotify="true"/>
+    <field id="incoming" type="assocarray" alwaysNotify="true"/>
+    <field id="connectionState" type="string"/>
+    <field id="shutdown" type="boolean"/>
+  </interface>
+</component>

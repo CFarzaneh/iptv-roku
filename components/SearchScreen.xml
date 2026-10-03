@@ -5,60 +5,57 @@
     <script type="text/brightscript" uri="pkg:/source/ChannelStore.brs" />
     <interface>
         <field id="channels" type="array" onChange="onChannelsChange" />
+        <field id="providerMode" type="boolean" />
+        <field id="accountConfig" type="assocarray" />
         <field id="playRequest" type="assocarray" />
         <field id="exitRequested" type="boolean" />
     </interface>
 
     <children>
-        <Button id="searchButton" 
-                translation="[96, 54]" 
-                minWidth="800" 
-                text="Search: (press OK)" />
-                
-        <Label id="hintLabel"
-               translation="[96, 130]"
-               color="0x8A968EFF"
-               width="800"
-               wrap="true"
-               text="OK opens the keyboard. Back exits. From the keyboard, Back returns to results." />
-               
-        <Label id="headerLabel"
-               translation="[96, 180]"
+        <Label id="titleLabel"
+               translation="[96, 46]"
+               width="1728" height="42"
+               text="SEARCH CHANNELS"
                color="0xECF2EEFF"
-               width="800"
+               font="font:MediumBoldSystemFont" />
+
+        <!-- A one-row LabelList provides the same green focus treatment as the rest
+             of the app. The stock Button painted a large white bar here. -->
+        <LabelList id="searchButton"
+                   translation="[96, 102]"
+                   itemSize="[1728, 64]"
+                   itemSpacing="[0, 0]"
+                   numRows="1"
+                   color="0xECF2EEFF"
+                   focusedColor="0x08130AFF"
+                   focusBitmapBlendColor="0x5FD345FF" />
+
+        <Label id="headerLabel"
+               translation="[96, 184]"
+               color="0xECF2EEFF"
+               width="1728"
                height="40" />
                
-        <!-- Same ChannelCard, so the same focus treatment: without the blend this screen
-             would keep the stock white ring while the Channels grid went green. -->
-        <MarkupGrid id="channelGrid"
-                    translation="[96, 220]"
-                    itemComponentName="ChannelCard"
-                    itemSize="[330, 220]"
-                    itemSpacing="[12, 12]"
-                    numColumns="4"
-                    numRows="3"
+        <Label translation="[168, 226]" width="720" height="24"
+               text="CHANNEL" color="0x8A968EFF"
+               font="font:SmallestBoldSystemFont" />
+        <Label translation="[964, 226]" width="760" height="24"
+               text="NOW / NEXT" color="0x8A968EFF"
+               font="font:SmallestBoldSystemFont" />
+        <MarkupList id="channelGrid"
+                    translation="[96, 256]"
+                    itemComponentName="ChannelRow"
+                    itemSize="[1728, 64]"
+                    itemSpacing="[0, 6]"
+                    numRows="10"
                     focusBitmapBlendColor="0x57C140FF" />
                     
         <Label id="statusLabel"
-               translation="[96, 400]"
-               width="1300"
+               translation="[96, 480]"
+               width="1728"
                horizAlign="center"
                color="0x8A968EFF"
                text="Type at least 2 characters" />
-               
-        <Rectangle id="keyboardBg"
-                   width="1920"
-                   height="1080"
-                   color="0x0E1310E6"
-                   visible="false">
-            <Label id="keyboardHint"
-                   translation="[700, 200]"
-                   width="600"
-                   horizAlign="center"
-                   color="0xECF2EEFF"
-                   text="Type to search. Back returns to results." />
-            <Keyboard id="keyboard" translation="[700, 250]" />
-        </Rectangle>
                
         <!-- Toast -->
         <!-- 920, matching ChannelsScreen. At 950 the 60px-high toast ended at 1010,
@@ -78,7 +75,6 @@
                    color="0xECF2EEFF" />
         </Rectangle>
         
-        <Timer id="searchTimer" duration="0.3" repeat="false" />
         <Timer id="toastTimer" duration="2.5" repeat="false" />
     </children>
 </component>

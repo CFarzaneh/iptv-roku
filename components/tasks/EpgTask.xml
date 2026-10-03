@@ -3,6 +3,8 @@
     <script type="text/brightscript" uri="pkg:/components/tasks/EpgTask.brs" />
     <interface>
         <field id="epgUrl" type="string" />
+        <field id="providerConfig" type="assocarray" />
+        <field id="providerChannels" type="array" />
         <field id="result" type="assocarray" />
         <field id="status" type="string" />
         <field id="error" type="string" />

@@ -7,9 +7,10 @@
 # a pattern can print a fatal and still exit 0, and the loop then reports
 # "clean" for every input. No pattern here can be rejected.
 import json, subprocess, sys, io
+from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-REPO = "P:/hisense/iptv-roku"
+REPO = str(Path(__file__).resolve().parent.parent)
 
 def git(*args):
     r = subprocess.run(["git", "-C", REPO] + list(args),
@@ -31,6 +32,9 @@ except Exception as e:
     sys.exit(3)
 
 url = cfg.get("playlistUrl", "")
+if url.startswith("xtream://"):
+    # This is a source-selection marker, not a credential-bearing URL.
+    url = cfg.get("xtream", {}).get("server", "")
 if not url:
     print("config.json has no playlistUrl - the scan has no needle. Aborting.")
     sys.exit(3)
@@ -88,7 +92,7 @@ if extra < 1:
     print("secret-needles.txt has no usable entries - refusing to report clean")
     sys.exit(3)
 
-FORBIDDEN_PATHS = ["config.json", "source/restore.json", "build.zip"]
+FORBIDDEN_PATHS = ["config.json", "source/restore.json", "source/dashboard.json", "dashboard.json", "build.zip"]
 
 # (path, needle name) -> why it is acceptable. These are REPORTED, not silenced:
 # a scan that hides things teaches you to trust a number you cannot audit.
@@ -153,7 +157,7 @@ print("positive controls: OK (" + str(len(needles)) + " needles, all findable)")
 
 # ---- what gets published ---------------------------------------------------
 rng = sys.argv[1] if len(sys.argv) > 1 else "origin/main..HEAD"
-commits = git("rev-list", rng).decode().split()
+commits = [git("write-tree").decode().strip()] if rng == "--staged" else git("rev-list", rng).decode().split()
 if not commits:
     print("NOTHING TO PUSH in range", rng)
     sys.exit(0)
@@ -175,6 +179,8 @@ for c in commits:
         for fp in FORBIDDEN_PATHS:
             if path == fp:
                 hits.append((c[:7], path, "FORBIDDEN PATH: " + fp))
+        if path.startswith("control-room/.private/") or ("/.env" in path and not path.endswith(".example")):
+            hits.append((c[:7], path, "FORBIDDEN PRIVATE CONFIGURATION"))
         if sha in seen_blobs:
             continue
         seen_blobs.add(sha)

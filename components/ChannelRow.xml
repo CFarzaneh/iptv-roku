@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ChannelRow" extends="Group">
+    <script type="text/brightscript" uri="pkg:/components/ChannelRow.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Theme.brs" />
+    <script type="text/brightscript" uri="pkg:/source/Epg.brs" />
+    <interface>
+        <field id="itemContent" type="node" />
+        <field id="focusPercent" type="float" />
+    </interface>
+
+    <children>
+        <Rectangle id="background" width="1356" height="64" color="0x18211CFF" />
+
+        <Rectangle id="fallbackBg" width="52" height="52" translation="[6, 6]">
+            <Label id="fallbackLabel" width="52" height="52"
+                   horizAlign="center" vertAlign="center" color="0xECF2EEFF"
+                   font="font:SmallestBoldSystemFont" />
+        </Rectangle>
+        <Poster id="logo" width="52" height="52" translation="[6, 6]"
+                loadDisplayMode="scaleToFit" visible="false" />
+
+        <Label id="nameLabel" translation="[70, 0]" width="602" height="64"
+               vertAlign="center" wrap="true" color="0xECF2EEFF"
+               font="font:SmallSystemFont" />
+
+        <Rectangle id="columnLine" width="2" height="44"
+                   translation="[686, 10]" color="0x2A362FFF" />
+
+        <Label id="nowLabel" translation="[704, 4]" width="610" height="27"
+               vertAlign="center" wrap="false" color="0xECF2EEFF"
+               font="font:SmallSystemFont" />
+        <Label id="nextLabel" translation="[704, 34]" width="610" height="26"
+               vertAlign="center" wrap="false" color="0x8A968EFF"
+               font="font:SmallestSystemFont" />
+
+        <Label id="favStar" text="★" translation="[1320, 15]"
+               color="0x74D45BFF" visible="false"
+               font="font:SmallSystemFont" />
+        <Rectangle id="errorBadge" width="10" height="10"
+                   translation="[1334, 46]" color="0xD9584FFF" visible="false" />
+    </children>
+</component>

@@ -1,5 +1,7 @@
 # Secrets: the real config.json contains the playlist URL with a subscription token
 config.json
+dashboard.json
+source/dashboard.json
 
 # Build/deploy artifacts
 build.zip

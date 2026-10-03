@@ -143,26 +143,6 @@ sub RestoreStoreIfEmpty()
     end if
 end sub
 
-' Print favorites and recents to the debug console (port 8085) so they can be captured
-' OFF the device before a sideload.
-'
-' Do NOT assume the registry survives an install. It was measured surviving one in
-' TASK-21/TASK-24, but on 2026-09-09 an install wiped the whole `userdata` section --
-' 31 favourites to zero -- most likely because the install before it had failed to
-' compile and unloaded the channel. A corrupt zip did the same in July. cachefs is no
-' help either: a reinstall wipes it. The console is the only way this data leaves the
-' box, so deploy.ps1 captures these two lines before it installs anything.
-' Format is deliberately one key per line with a fixed prefix, so a capture script can
-' find them without parsing the surrounding log.
-sub DumpStore()
-    favs = LoadFavorites()
-    recents = LoadRecents()
-    if favs = invalid then favs = []
-    if recents = invalid then recents = []
-    print "[STORE] favorites=" + FormatJson(favs)
-    print "[STORE] recents=" + FormatJson(recents)
-end sub
-
 ' Old entries are URLs (contain "://"). Convert them using the current playlist; drop unmatched.
 sub MigrateStoreToNames(channels as object)
     if channels = invalid then return

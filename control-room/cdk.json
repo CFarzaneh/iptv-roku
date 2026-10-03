@@ -1,0 +1,5 @@
+{
+  "app": "node infra/app.mjs",
+  "output": ".private/cdk.out",
+  "context": { "region": "us-east-2" }
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="XtreamTask" extends="Task">
+    <script type="text/brightscript" uri="pkg:/components/tasks/XtreamTask.brs" />
+    <interface>
+        <field id="accountConfig" type="assocarray" />
+        <field id="categoryId" type="string" />
+        <field id="categoryName" type="string" />
+        <field id="searchQuery" type="string" />
+        <field id="playlistUrl" type="string" />
+        <field id="forceReload" type="boolean" />
+        <field id="result" type="assocarray" />
+        <field id="status" type="string" />
+        <field id="error" type="string" />
+    </interface>
+</component>

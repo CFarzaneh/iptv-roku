@@ -2,7 +2,13 @@
 <component name="MainScene" extends="Scene">
     <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
     <script type="text/brightscript" uri="pkg:/source/Theme.brs" />
+    <script type="text/brightscript" uri="pkg:/source/DashboardModel.brs" />
+    <script type="text/brightscript" uri="pkg:/components/DashboardBridge.brs" />
+    <interface>
+        <field id="exitApp" type="boolean" />
+    </interface>
     <children>
+        <Timer id="dashboardTimer" duration="5" repeat="true" />
         <Timer id="epgRefreshTimer" duration="3600" repeat="true" />
         <Timer id="nowTimer" duration="30" repeat="true" />
         <Rectangle id="background" width="1920" height="1080" color="0x0E1310FF">
@@ -41,7 +47,7 @@
                    horizAlign="center"
                    visible="false" />
             <Label id="errorHintLabel"
-                   text="Press OK to retry"
+                   text="OK: retry    Back: edit playlist URL"
                    color="0x8A968EFF"
                    translation="[0, 540]"
                    width="1920"
@@ -78,19 +84,20 @@
             <!-- Onboarding -->
             <Group id="onboardingGroup" visible="false">
                 <Label text="IPTV Player"
-                       translation="[0, 200]"
+                       translation="[0, 330]"
                        color="0xECF2EEFF"
                        width="1920"
                        horizAlign="center" />
-                <Keyboard id="onboardingKeyboard" translation="[700, 300]" />
-                <Label text="Or set the URL in config.json and reinstall"
-                       translation="[0, 800]"
+                <Label text="Enter your playlist URL to get started."
+                       translation="[240, 440]"
                        color="0x8A968EFF"
-                       width="1920"
+                       width="1440"
                        horizAlign="center" />
                 <Button id="onboardingOk"
-                        text="Save and continue"
-                        translation="[700, 700]" />
+                        text="Enter playlist URL"
+                        minWidth="640"
+                        maxWidth="640"
+                        translation="[640, 540]" />
             </Group>
         </Rectangle>
     </children>

@@ -14,12 +14,15 @@ sub init()
     m.settingsScreen = m.top.findNode("settingsScreen")
     
     m.onboardingGroup = m.top.findNode("onboardingGroup")
-    m.onboardingKeyboard = m.top.findNode("onboardingKeyboard")
     m.onboardingOk = m.top.findNode("onboardingOk")
+    m.onboardingDialog = invalid
+    m.onboardingDraft = ""
+    m.exitDialog = invalid
     
     m.channelsScreen.observeField("playRequest", "onPlayRequest")
     m.channelsScreen.observeField("openSearch", "onOpenSearch")
     m.channelsScreen.observeField("openSettings", "onOpenSettings")
+    m.channelsScreen.observeField("catalogUpdate", "onCatalogUpdate")
     
     m.playerScreen.observeField("exitRequested", "onPlayerExit")
     
@@ -39,8 +42,13 @@ sub init()
     m.epgNoticeShown = false
     m.epgUserInitiated = false
     m.epgGeneratedText = ""
+    m.epgAutomatic = false
+    m.epgOverrideUrl = ""
+    m.epgProviderRunning = false
+    m.epgPendingChannels = []
+    m.epgPendingIds = {}
 
-    m.onboardingOk.observeField("buttonSelected", "onOnboardingSave")
+    m.onboardingOk.observeField("buttonSelected", "openOnboardingKeyboard")
     
     m.epgRefreshTimer = m.top.findNode("epgRefreshTimer")
     m.epgRefreshTimer.observeField("fire", "onEpgRefresh")
@@ -80,9 +88,21 @@ end sub
 sub onConfigLoaded()
     config = m.configTask.config
     m.configCache = config
-    
+    startDashboard()
+
     url = ""
     sec = CreateObject("roRegistrySection", "settings")
+    ' A personalized package can replace an old saved URL once. Subsequent launches
+    ' keep user edits instead of repeatedly overwriting the registry.
+    if config <> invalid and config.importRevision <> invalid and config.playlistUrl <> invalid
+        if config.importRevision <> "" and config.playlistUrl <> ""
+            if sec.Read("importRevision") <> config.importRevision
+                sec.Write("playlistUrl", config.playlistUrl)
+                sec.Write("importRevision", config.importRevision)
+                sec.Flush()
+            end if
+        end if
+    end if
     if sec.Exists("playlistUrl")
         url = sec.Read("playlistUrl")
     end if
@@ -99,13 +119,24 @@ sub onConfigLoaded()
 end sub
 
 sub startPlaylistLoad(url as string, forceReload as boolean)
+    if m.currentUrl <> url then m.dashboardSourceRevision = dashboardUuid()
     showLoading("Loading playlist…")
     m.currentUrl = url
-    m.playlistTask = CreateObject("roSGNode", "PlaylistTask")
+    useLiveApi = false
+    if m.configCache <> invalid and m.configCache.xtream <> invalid
+        useLiveApi = (url = m.configCache.playlistUrl)
+    end if
+    if useLiveApi
+        showLoading("Loading live channels…")
+        m.playlistTask = CreateObject("roSGNode", "XtreamTask")
+        m.playlistTask.accountConfig = m.configCache.xtream
+    else
+        m.playlistTask = CreateObject("roSGNode", "PlaylistTask")
+    end if
     m.playlistTask.playlistUrl = url
     m.playlistTask.forceReload = forceReload
     m.playlistTask.observeField("status", "onPlaylistStatus")
-    if m.configCache <> invalid and m.configCache.extraPlaylists <> invalid
+    if not useLiveApi and m.configCache <> invalid and m.configCache.extraPlaylists <> invalid
         m.playlistTask.extraPlaylists = m.configCache.extraPlaylists
     end if
     m.playlistTask.control = "RUN"
@@ -117,20 +148,11 @@ sub onPlaylistStatus()
     if status = "ok" or status = "cache"
         res = m.playlistTask.result
         if res <> invalid
+            resetDashboardCatalog(res)
             m.playlistResultCache = res
             showChannels(res)
             
-            epgUrl = ""
-            sec = CreateObject("roRegistrySection", "settings")
-            if sec.Exists("epgUrl")
-                epgUrl = sec.Read("epgUrl")
-            else if m.configCache <> invalid and m.configCache.epgUrl <> invalid
-                epgUrl = m.configCache.epgUrl
-            end if
-            
-            if epgUrl <> ""
-                startEpgLoad(epgUrl)
-            end if
+            configureEpg(res)
         end if
     else if status = "error"
         err = m.playlistTask.error
@@ -178,29 +200,85 @@ end sub
 sub showOnboarding()
     hideAllScreens()
     m.onboardingGroup.visible = true
-    m.onboardingKeyboard.setFocus(true)
+    m.onboardingOk.setFocus(true)
+    openOnboardingKeyboard()
 end sub
 
-sub onOnboardingSave()
-    url = m.onboardingKeyboard.text
-    if url <> ""
-        sec = CreateObject("roRegistrySection", "settings")
-        sec.Write("playlistUrl", url)
-        sec.Flush()
-        startPlaylistLoad(url, false)
+sub openOnboardingKeyboard()
+    if m.onboardingDialog <> invalid then return
+
+    ' The system dialog lays out its keyboard and buttons together at the current
+    ' display resolution. Do not position a standalone keyboard by a fixed offset.
+    dialog = CreateObject("roSGNode", "StandardKeyboardDialog")
+    dialog.title = "Enter playlist URL"
+    dialog.buttons = ["Save and continue", "Cancel"]
+    dialog.text = m.onboardingDraft
+    ' Provider URLs can be much longer than the default text field allows.
+    dialog.textEditBox.maxTextLength = 4096
+    ' URL credentials should not introduce voice entry as a new input path.
+    dialog.textEditBox.voiceEnabled = false
+    dialog.observeField("buttonSelected", "onOnboardingButton")
+    dialog.observeField("wasClosed", "onOnboardingClosed")
+    m.onboardingDialog = dialog
+    m.top.dialog = dialog
+end sub
+
+sub onOnboardingButton(event as object)
+    if m.onboardingDialog = invalid then return
+    if event.getData() <> 0
+        m.onboardingDialog.close = true
+        return
     end if
+
+    url = m.onboardingDialog.text.Trim()
+    if url = ""
+        m.onboardingDialog.title = "Please enter a playlist URL"
+        return
+    end if
+
+    sec = CreateObject("roRegistrySection", "settings")
+    sec.Write("playlistUrl", url)
+    sec.Flush()
+    m.onboardingDraft = url
+    ' Hide setup first so a close event cannot steal focus from the next screen.
+    m.onboardingGroup.visible = false
+    m.onboardingDialog.close = true
+    startPlaylistLoad(url, false)
+end sub
+
+sub onOnboardingClosed()
+    if m.onboardingDialog = invalid then return
+    m.onboardingDraft = m.onboardingDialog.text
+    m.onboardingDialog = invalid
+    ' Cancel/Back keep the draft and leave an explicit way to reopen the keyboard.
+    if m.onboardingGroup.visible then m.onboardingOk.setFocus(true)
 end sub
 
 sub showChannels(res as object)
     hideAllScreens()
     m.channelsScreen.visible = true
+    if res.providerMode = true and m.configCache <> invalid
+        m.channelsScreen.accountConfig = m.configCache.xtream
+    end if
     m.channelsScreen.playlistResult = res
     m.channelsScreen.setFocus(true)
+end sub
+
+sub onCatalogUpdate(event as object)
+    update = event.getData()
+    if update = invalid or update.channels = invalid then return
+    if m.playlistResultCache = invalid then return
+    m.playlistResultCache.channels = update.channels
+    rememberDashboardChannels(update.channels)
+    if update.newChannels <> invalid then queueProviderEpg(update.newChannels)
 end sub
 
 sub onPlayRequest(event as object)
     req = event.getData()
     if req <> invalid and req.channels <> invalid
+        if m.epgAutomatic and req.index <> invalid and req.index >= 0 and req.index < req.channels.Count()
+            queueProviderEpg([req.channels[req.index]])
+        end if
         hideAllScreens()
         m.playerScreen.visible = true
         
@@ -219,8 +297,13 @@ sub onPlayerExit()
 end sub
 
 sub onOpenSearch()
+    m.searchScreen.providerMode = false
     if m.playlistResultCache <> invalid
         m.searchScreen.channels = m.playlistResultCache.channels
+        if m.playlistResultCache.providerMode = true and m.configCache <> invalid and m.configCache.xtream <> invalid
+            m.searchScreen.providerMode = true
+            m.searchScreen.accountConfig = m.configCache.xtream
+        end if
     end if
     hideAllScreens()
     m.searchScreen.visible = true
@@ -232,7 +315,8 @@ sub onOpenSettings()
         channelCount: 0,
         fetchedAt: "",
         source: "",
-        epgUrl: ""
+        epgUrl: "",
+        epgAutomatic: m.epgAutomatic
     }
     if m.playlistResultCache <> invalid
         if m.playlistResultCache.channels <> invalid
@@ -241,7 +325,7 @@ sub onOpenSettings()
         info.fetchedAt = fmtEpochLocal(m.playlistResultCache.fetchedAt)
         info.source = m.playlistResultCache.source
     end if
-    if m.currentEpgUrl <> invalid then info.epgUrl = m.currentEpgUrl
+    info.epgUrl = m.epgOverrideUrl
     if m.epgCount <> invalid then info.epgCount = m.epgCount
     info.epgFailed = m.epgFailed
     info.epgGeneratedText = m.epgGeneratedText
@@ -264,48 +348,62 @@ sub onSettingsAction()
     else if action = "clearCache"
         startPlaylistLoad(m.currentUrl, false)
     else if action = "urlChanged"
+        sec = CreateObject("roRegistrySection", "settings")
+        sec.Delete("dashboardProvider")
+        sec.Flush()
         startPlaylistLoad(m.settingsScreen.newUrl, false)
     else if action = "epgChanged"
         ' The user just asked for this load, so report its outcome even if a toast
         ' has already been shown this session.
         m.epgUserInitiated = true
-        startEpgLoad(m.settingsScreen.newUrl)
+        configureEpg(m.playlistResultCache)
+    end if
+end sub
+
+sub configureEpg(res as object)
+    m.epgAutomatic = false
+    m.epgOverrideUrl = ""
+    epgUrl = ""
+    sec = CreateObject("roRegistrySection", "settings")
+    if sec.Exists("epgUrl") then epgUrl = sec.Read("epgUrl").Trim()
+    if epgUrl = "" and m.configCache <> invalid and m.configCache.epgUrl <> invalid
+        epgUrl = m.configCache.epgUrl.Trim()
+    end if
+
+    if epgUrl <> ""
+        m.epgOverrideUrl = epgUrl
+        startEpgLoad(epgUrl)
+    else if res <> invalid and res.providerMode = true and m.configCache <> invalid and m.configCache.xtream <> invalid
+        m.epgAutomatic = true
+        m.currentEpgUrl = ""
+        m.epgPendingChannels = []
+        m.epgPendingIds = {}
+        if not m.epgProviderRunning then startProviderEpgLoad([])
+    else
+        m.currentEpgUrl = ""
     end if
 end sub
 
 sub startEpgLoad(url as string)
     m.currentEpgUrl = url
-    m.epgTask = CreateObject("roSGNode", "EpgTask")
-    m.epgTask.epgUrl = url
-    m.epgTask.observeField("status", "onEpgStatus")
-    m.epgTask.control = "RUN"
+    m.urlEpgTask = CreateObject("roSGNode", "EpgTask")
+    m.urlEpgTask.epgUrl = url
+    m.urlEpgTask.observeField("status", "onUrlEpgStatus")
+    m.urlEpgTask.control = "RUN"
     
     m.epgRefreshTimer.control = "start"
 end sub
 
-sub onEpgStatus()
-    status = m.epgTask.status
+sub onUrlEpgStatus()
+    if m.urlEpgTask = invalid then return
+    status = m.urlEpgTask.status
     if status = "ok" or status = "cache"
-        res = m.epgTask.result
-        if res <> invalid
-            if m.global.epg = invalid then m.global.addField("epg", "assocarray", false)
-            if m.global.epgReady = invalid then m.global.addField("epgReady", "boolean", false)
-            m.global.epg = res.epg
-            m.global.epgReady = not m.global.epgReady
-
-            m.epgCount = res.count
-            m.epgGenerated = res.generated
-            ' Format once here, not in SettingsScreen.updateInfo -- that runs on every
-            ' rail focus move, and roDateTime per focus event is the allocation
-            ' pattern GEMINI.md #17 exists to prevent.
-            m.epgGeneratedText = fmtEpochLocal(res.generated)
-            m.epgFailed = false
-        end if
+        acceptEpgResult(m.urlEpgTask.result)
     else if status = "error"
         ' EPG is an enhancement, not a requirement: channels must keep playing. So no
         ' showError() here -- that hides the grid. A log line, a durable record in
         ' About, and at most one toast.
-        reason = m.epgTask.error
+        reason = m.urlEpgTask.error
         if reason = invalid or reason = "" then reason = "unknown"
         print "MainScene: EPG unavailable (" + reason + ")"
 
@@ -319,6 +417,80 @@ sub onEpgStatus()
     end if
     ' Consumed either way: it marks one specific load, not a standing mode.
     m.epgUserInitiated = false
+end sub
+
+sub queueProviderEpg(channels as object)
+    if not m.epgAutomatic or channels = invalid then return
+    for each ch in channels
+        streamId = ""
+        epgId = ""
+        if ch.providerStreamId <> invalid then streamId = ch.providerStreamId
+        if ch.tvgId <> invalid then epgId = ch.tvgId
+        if streamId <> "" and epgId <> "" and not m.epgPendingIds.DoesExist(streamId)
+            m.epgPendingIds[streamId] = true
+            m.epgPendingChannels.Push(ch)
+        end if
+    end for
+    if not m.epgProviderRunning and m.epgPendingChannels.Count() > 0
+        channelsToLoad = m.epgPendingChannels
+        m.epgPendingChannels = []
+        m.epgPendingIds = {}
+        startProviderEpgLoad(channelsToLoad)
+    end if
+end sub
+
+sub startProviderEpgLoad(channels as object)
+    if not m.epgAutomatic or m.epgProviderRunning then return
+    m.epgProviderRunning = true
+    m.providerEpgTask = CreateObject("roSGNode", "EpgTask")
+    m.providerEpgTask.providerConfig = m.configCache.xtream
+    m.providerEpgTask.providerChannels = channels
+    m.providerEpgTask.observeField("status", "onProviderEpgStatus")
+    m.providerEpgTask.control = "RUN"
+    m.epgRefreshTimer.control = "start"
+end sub
+
+sub onProviderEpgStatus()
+    if m.providerEpgTask = invalid then return
+    status = m.providerEpgTask.status
+    if status <> "ok" and status <> "cache" and status <> "error" then return
+    if m.epgAutomatic
+        if status = "ok" or status = "cache"
+            acceptEpgResult(m.providerEpgTask.result)
+        else
+            reason = m.providerEpgTask.error
+            if reason = invalid or reason = "" then reason = "unknown"
+            print "MainScene: automatic EPG unavailable (" + reason + ")"
+            m.epgFailed = true
+            if m.epgUserInitiated or not m.epgNoticeShown
+                showNotice("Automatic guide unavailable")
+                m.epgNoticeShown = true
+            end if
+        end if
+    end if
+    m.epgUserInitiated = false
+    m.epgProviderRunning = false
+    m.providerEpgTask = invalid
+    if m.epgAutomatic and m.epgPendingChannels.Count() > 0
+        channelsToLoad = m.epgPendingChannels
+        m.epgPendingChannels = []
+        m.epgPendingIds = {}
+        startProviderEpgLoad(channelsToLoad)
+    end if
+end sub
+
+sub acceptEpgResult(res as object)
+    if res = invalid or res.epg = invalid then return
+    if m.global.epg = invalid then m.global.addField("epg", "assocarray", false)
+    if m.global.epgReady = invalid then m.global.addField("epgReady", "boolean", false)
+    m.global.epg = res.epg
+    m.global.epgReady = not m.global.epgReady
+    m.epgCount = res.epg.Count()
+    if res.generated <> invalid
+        m.epgGenerated = res.generated
+        m.epgGeneratedText = fmtEpochLocal(res.generated)
+    end if
+    m.epgFailed = false
 end sub
 
 ' Best-effort toast on whichever screen is in front. MainScene owns no toast of its
@@ -336,23 +508,48 @@ sub showNotice(msg as string)
     target.noticeCommand = not target.noticeCommand
 end sub
 
+sub showExitConfirmation()
+    if m.exitDialog <> invalid then return
+    dialog = CreateObject("roSGNode", "StandardMessageDialog")
+    dialog.title = "Exit IPTV Player?"
+    dialog.message = ["Are you sure you want to exit?"]
+    dialog.buttons = ["Exit", "Cancel"]
+    dialog.observeField("buttonSelected", "onExitDialogButton")
+    dialog.observeField("wasClosed", "onExitDialogClosed")
+    m.exitDialog = dialog
+    m.top.dialog = dialog
+end sub
+
+sub onExitDialogButton(event as object)
+    if m.exitDialog = invalid then return
+    if event.getData() = 0
+        m.exitDialog.close = true
+        m.top.exitApp = not m.top.exitApp
+    else
+        m.exitDialog.close = true
+    end if
+end sub
+
+sub onExitDialogClosed()
+    m.exitDialog = invalid
+end sub
+
 function onKeyEvent(key as string, press as boolean) as boolean
     handled = false
     if press
-        if m.onboardingGroup.visible
-            if key = "down"
-                if m.onboardingKeyboard.hasFocus()
-                    m.onboardingOk.setFocus(true)
-                    handled = true
+        if key = "back"
+            if m.errorLabel.visible
+                if m.currentUrl <> invalid and not m.currentUrl.StartsWith("xtream://")
+                    m.onboardingDraft = m.currentUrl
+                else
+                    m.onboardingDraft = ""
                 end if
-            else if key = "up"
-                if m.onboardingOk.hasFocus()
-                    m.onboardingKeyboard.setFocus(true)
-                    handled = true
-                end if
+                showOnboarding()
+                handled = true
+            else if m.channelsScreen.visible
+                showExitConfirmation()
+                handled = true
             end if
-        else if key = "back"
-            handled = false
         else if key = "OK"
             if m.errorLabel.visible
                 if m.currentUrl <> invalid and m.currentUrl <> ""
@@ -396,7 +593,11 @@ function fmtEpochLocal(v as dynamic) as string
 end function
 
 sub onEpgRefresh()
-    if m.currentEpgUrl <> invalid and m.currentEpgUrl <> ""
+    if m.epgAutomatic
+        if m.playlistResultCache <> invalid and m.playlistResultCache.channels <> invalid
+            queueProviderEpg(m.playlistResultCache.channels)
+        end if
+    else if m.currentEpgUrl <> invalid and m.currentEpgUrl <> ""
         startEpgLoad(m.currentEpgUrl)
     end if
 end sub

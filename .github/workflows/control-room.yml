@@ -1,0 +1,26 @@
+name: Control room checks
+on:
+  push:
+    paths: ['control-room/**', 'components/**', 'source/**', '.github/workflows/control-room.yml']
+  pull_request:
+    paths: ['control-room/**', 'components/**', 'source/**', '.github/workflows/control-room.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: python3 tools/check_node_refs.py
+      - run: pnpm install --frozen-lockfile
+        working-directory: control-room
+      - run: pnpm test && pnpm build && pnpm synth
+        working-directory: control-room

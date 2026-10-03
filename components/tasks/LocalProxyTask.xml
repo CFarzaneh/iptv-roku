@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="LocalProxyTask" extends="Task">
+    <script type="text/brightscript" uri="pkg:/components/tasks/LocalProxyTask.brs" />
+    <interface>
+        <field id="listenPort" type="integer" />
+        <field id="sourceUrl" type="string" />
+        <field id="transformMode" type="string" />
+        <field id="status" type="string" />
+        <field id="error" type="string" />
+        <field id="requestCount" type="integer" />
+        <field id="lastRequest" type="string" />
+        <field id="lastEvent" type="string" />
+    </interface>
+</component>

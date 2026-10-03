@@ -36,6 +36,7 @@ sub init()
     m.zapperTimer = m.top.findNode("zapperTimer")
     
     m.video.observeField("state", "onVideoStateChange")
+    m.video.observeField("availableAudioTracks", "onAvailableAudioTracks")
     m.overlayTimer.observeField("fire", "hideOverlay")
     m.miniBannerTimer.observeField("fire", "hideMiniBanner")
     m.toastTimer.observeField("fire", "hideToast")
@@ -69,6 +70,18 @@ sub init()
     end if
     
     m.currentIndex = -1
+
+    ' Roku rejects some otherwise playable HE-AAC streams when their ADTS headers
+    ' advertise the Main profile. Keep the local repair dormant unless that exact
+    ' decoder error occurs. Once detected, remember the channel for this app session
+    ' so later visits go straight through the repaired path.
+    m.audioRepairTask = invalid
+    m.audioRepairKnown = {}
+    m.audioRepairPendingIndex = -1
+    m.audioRepairActive = false
+    m.audioRepairPort = 8765
+    m.audioRepairSession = 0
+    initDashboardTelemetry()
 end sub
 
 sub addErrorOption(parent as object, title as string)
@@ -89,20 +102,14 @@ sub playIndex(idx as integer)
     
     m.currentIndex = idx
     channel = m.top.playlist[idx]
-    
-    node = CreateObject("roSGNode", "ContentNode")
-    node.title = channel.name
-    node.url = channel.url
-    node.streamFormat = "hls"
-    
-    m.video.content = node
-    m.video.control = "play"
+    dashboardBeginTune(channel)
     
     if not IsAdultGroup(channel.group)
         PushRecent(channel.name)
     end if
     
     m.errorDialog.visible = false
+    m.lastPlaybackError = ""
     
     ' Set the loading caption HERE, not only from onVideoStateChange. That observer
     ' fires on a state CHANGE, and a zap while the video is already "buffering" does
@@ -112,8 +119,40 @@ sub playIndex(idx as integer)
 
     showMiniBanner(channel)
     updateOverlayData(channel)
-    
     focusPlayer()
+
+    key = audioRepairKey(channel)
+    if key <> "" and m.audioRepairKnown.DoesExist(key)
+        print "[MEDIA] using remembered local audio repair"
+        startAudioRepair(idx)
+    else
+        m.audioRepairPendingIndex = -1
+        playChannelUrl(channel, channel.url, false)
+    end if
+end sub
+
+sub playChannelUrl(channel as object, url as string, repaired as boolean)
+    node = CreateObject("roSGNode", "ContentNode")
+    node.title = channel.name
+    node.url = url
+    if repaired
+        node.streamFormat = "hls"
+    else if channel.streamFormat <> invalid and channel.streamFormat <> ""
+        node.streamFormat = channel.streamFormat
+    else
+        node.streamFormat = "hls"
+    end if
+    node.live = true
+    ' This provider rejects generic/default clients with HTTP 403, while its API,
+    ' browser clients, and a Roku-style User-Agent receive the same HLS playlist.
+    ' Put the header on the ContentNode so the Video node applies it to both the
+    ' manifest and media-segment requests (not just the catalog API request).
+    node.HttpHeaders = ["User-Agent:Mozilla/5.0"]
+
+    m.audioRepairActive = repaired
+    m.video.mute = false
+    m.video.content = node
+    m.video.control = "play"
 end sub
 
 sub onVideoStateChange()
@@ -123,7 +162,11 @@ sub onVideoStateChange()
         m.spinnerAnim.control = "start"
         m.loadingLabel.visible = true
         if m.currentIndex >= 0 and m.top.playlist <> invalid
-            m.loadingLabel.text = "Loading: " + m.top.playlist[m.currentIndex].name
+            if m.audioRepairActive
+                m.loadingLabel.text = "Repairing audio: " + m.top.playlist[m.currentIndex].name
+            else
+                m.loadingLabel.text = "Loading: " + m.top.playlist[m.currentIndex].name
+            end if
         else
             m.loadingLabel.text = "Loading…"
         end if
@@ -135,9 +178,184 @@ sub onVideoStateChange()
         m.spinner.visible = false
         m.spinnerAnim.control = "stop"
         m.loadingLabel.visible = false
+        printPlaybackDiagnostics()
+        if shouldRepairUnsupportedAac()
+            channel = m.top.playlist[m.currentIndex]
+            key = audioRepairKey(channel)
+            if key <> "" then m.audioRepairKnown[key] = true
+            print "[MEDIA] unsupported AAC detected; starting local repair"
+            startAudioRepair(m.currentIndex)
+            return
+        end if
+        m.lastPlaybackError = playbackErrorText()
+        showErrorDialog()
+    end if
+    dashboardObserveState()
+end sub
+
+function shouldRepairUnsupportedAac() as boolean
+    if m.audioRepairActive then return false
+    if m.currentIndex < 0 or m.top.playlist = invalid then return false
+    if m.currentIndex >= m.top.playlist.Count() then return false
+    channel = m.top.playlist[m.currentIndex]
+    if not channelSupportsAudioRepair(channel) then return false
+
+    detail = mediaErrorDetail()
+    return detail.Instr("unsupported aac stream") >= 0
+end function
+
+function mediaErrorDetail() as string
+    detail = ""
+    if m.video.errorStr <> invalid then detail = detail + " " + m.video.errorStr.ToStr()
+    if m.video.errorMsg <> invalid then detail = detail + " " + m.video.errorMsg.ToStr()
+    info = m.video.errorInfo
+    if info <> invalid and GetInterface(info, "ifAssociativeArray") <> invalid
+        if info.dbgmsg <> invalid then detail = detail + " " + info.dbgmsg.ToStr()
+    end if
+    return LCase(detail)
+end function
+
+function channelSupportsAudioRepair(channel as dynamic) as boolean
+    if channel = invalid or channel.url = invalid then return false
+    url = LCase(channel.url.ToStr())
+    if not url.StartsWith("http://") and not url.StartsWith("https://") then return false
+    ' The local relay rewrites HLS manifests. Do not feed a bare transport stream
+    ' or another container to its manifest parser.
+    return url.Instr(".m3u8") >= 0
+end function
+
+function audioRepairKey(channel as dynamic) as string
+    if channel = invalid then return ""
+    if channel.providerStreamId <> invalid and channel.providerStreamId.ToStr() <> ""
+        return "stream:" + channel.providerStreamId.ToStr()
+    end if
+    if channel.url <> invalid and channel.url.ToStr() <> ""
+        return "url:" + channel.url.ToStr()
+    end if
+    return ""
+end function
+
+sub startAudioRepair(idx as integer)
+    if m.top.playlist = invalid or idx < 0 or idx >= m.top.playlist.Count() then return
+    channel = m.top.playlist[idx]
+    if not channelSupportsAudioRepair(channel) then return
+
+    m.audioRepairPendingIndex = idx
+    m.audioRepairActive = true
+    m.video.control = "stop"
+    m.errorDialog.visible = false
+    m.spinner.visible = true
+    m.spinnerAnim.control = "start"
+    m.loadingLabel.text = "Repairing audio: " + channel.name
+    m.loadingLabel.visible = true
+
+    if m.audioRepairTask = invalid or m.audioRepairTask.status = "error"
+        m.audioRepairTask = CreateObject("roSGNode", "LocalProxyTask")
+        m.audioRepairTask.listenPort = m.audioRepairPort
+        m.audioRepairTask.transformMode = "aac-main-to-lc"
+        m.audioRepairTask.observeField("status", "onAudioRepairStatus")
+        m.audioRepairTask.sourceUrl = channel.url
+        m.audioRepairTask.control = "RUN"
+    else
+        m.audioRepairTask.sourceUrl = channel.url
+        if m.audioRepairTask.status = "ready" then playPendingAudioRepair()
+    end if
+end sub
+
+sub onAudioRepairStatus()
+    if m.audioRepairTask = invalid then return
+    if m.audioRepairTask.status = "ready"
+        print "[MEDIA] local audio repair ready"
+        playPendingAudioRepair()
+    else if m.audioRepairTask.status = "error"
+        print "[MEDIA] local audio repair could not start"
+        m.audioRepairPendingIndex = -1
+        m.spinner.visible = false
+        m.spinnerAnim.control = "stop"
+        m.loadingLabel.visible = false
+        m.lastPlaybackError = "Roku could not start the on-device audio repair."
+        publishPlayerTelemetry("error")
         showErrorDialog()
     end if
 end sub
+
+sub playPendingAudioRepair()
+    idx = m.audioRepairPendingIndex
+    if idx < 0 or idx <> m.currentIndex then return
+    if m.top.playlist = invalid or idx >= m.top.playlist.Count() then return
+    channel = m.top.playlist[idx]
+    m.audioRepairTask.sourceUrl = channel.url
+    m.audioRepairSession = m.audioRepairSession + 1
+    localUrl = "http://127.0.0.1:" + m.audioRepairPort.ToStr().Trim() + "/proxy.m3u8?session=" + m.audioRepairSession.ToStr().Trim()
+    m.audioRepairPendingIndex = -1
+    print "[MEDIA] retrying through local audio repair"
+    playChannelUrl(channel, localUrl, true)
+end sub
+
+sub onAvailableAudioTracks()
+    tracks = m.video.availableAudioTracks
+    count = 0
+    if tracks <> invalid then count = tracks.Count()
+    print "[MEDIA] availableAudioTracks="; count
+    if tracks = invalid then return
+    for each track in tracks
+        codec = mediaField(track, "Codec")
+        language = mediaField(track, "Language")
+        print "[MEDIA] audioTrack codec="; codec; " language="; language
+    end for
+end sub
+
+function mediaField(value as dynamic, key as string) as string
+    if value = invalid or GetInterface(value, "ifAssociativeArray") = invalid then return ""
+    field = value[key]
+    if field = invalid then return ""
+    return field.ToStr()
+end function
+
+function safeMediaDiagnostic(value as dynamic) as string
+    if value = invalid then return ""
+    text = value.ToStr()
+    lower = LCase(text)
+    if lower.Instr("http://") >= 0 or lower.Instr("https://") >= 0 then return "[URL redacted]"
+    if text.Len() > 240 then text = text.Left(240)
+    return text
+end function
+
+sub printPlaybackDiagnostics()
+    print "[MEDIA] state=error code="; m.video.errorCode; " message="; safeMediaDiagnostic(m.video.errorMsg)
+    print "[MEDIA] audioFormat="; m.video.audioFormat; " videoFormat="; m.video.videoFormat
+    print "[MEDIA] errorStr="; safeMediaDiagnostic(m.video.errorStr)
+    info = m.video.errorInfo
+    if info <> invalid and GetInterface(info, "ifAssociativeArray") <> invalid
+        print "[MEDIA] error category="; mediaField(info, "category"); " errcode="; mediaField(info, "errcode"); " source="; mediaField(info, "source")
+        print "[MEDIA] dbgmsg="; safeMediaDiagnostic(info.dbgmsg)
+    end if
+    onAvailableAudioTracks()
+end sub
+
+function playbackErrorText() as string
+    codeText = ""
+    if m.video.errorCode <> invalid then codeText = m.video.errorCode.ToStr()
+
+    message = ""
+    if m.video.errorMsg <> invalid then message = m.video.errorMsg.Trim()
+    ' Do not allow a player diagnostic to put a credential-bearing media URL on
+    ' screen. The numeric Roku error remains available even when detail is hidden.
+    if message.Instr("http://") >= 0 or message.Instr("https://") >= 0
+        message = ""
+    else if message.Len() > 160
+        message = message.Left(160)
+    end if
+
+    if codeText <> "" and message <> "" and LCase(message) <> "ignored"
+        return "Roku error " + codeText + ": " + message
+    else if codeText <> ""
+        return "Roku playback error " + codeText + "."
+    else if message <> "" and LCase(message) <> "ignored"
+        return message
+    end if
+    return "Roku could not decode or retrieve this stream."
+end function
 
 ' Labels and actions are written in ONE pass into two parallel lists, so the menu's length
 ' and its behaviour cannot drift apart. This menu is now variable-length, and the dispatch
@@ -175,7 +393,11 @@ function buildErrorOptions() as object
 end function
 
 sub showErrorDialog()
-    m.errorMsg.text = "Couldn't play this stream."
+    if m.lastPlaybackError <> invalid and m.lastPlaybackError <> ""
+        m.errorMsg.text = m.lastPlaybackError
+    else
+        m.errorMsg.text = "Couldn't play this stream."
+    end if
     m.errorOptions.content = buildErrorOptions()
     m.errorDialog.visible = true
     m.errorOptions.setFocus(true)

@@ -1,0 +1,25 @@
+{
+  "name": "iptv-control-room",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "node server/index.mjs",
+    "test": "node --test test/*.test.mjs",
+    "provision": "node scripts/provision.mjs",
+    "cdk": "cdk",
+    "synth": "cdk synth --quiet"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "aws-jwt-verify": "^5.0.0",
+    "fastify": "^5.0.0",
+    "jose": "^6.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": { "vite": "^7.0.0", "aws-cdk": "^2.1000.0", "aws-cdk-lib": "^2.220.0", "constructs": "^10.0.0" }
+}
