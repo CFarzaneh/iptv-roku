@@ -85,7 +85,7 @@ python3 ../tools/package_personalized.py dads-roku \
   --output ../builds/dads-roku-v1.0.20.zip
 ```
 
-The current TV's favorites/recents recovery seed must be captured and verified before replacing its sideload. If Dad is replacing an existing sideload, capture his Roku's store separately. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
+The current TV's favorites/recents recovery seed must be captured and verified before replacing its sideload. From a computer on the same LAN, run `python3 ../tools/backup_roku_store.py ROKU_LAN_IP`; it uses Roku's read-only developer-mode `query/registry/dev` endpoint and saves only validated lists and the developer ID under ignored `backups/`. Roku may require **Settings → System → Advanced system settings → Control by mobile apps → Enabled** for this endpoint. If Dad is replacing an existing sideload, capture his Roku's store separately from his home network. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
 
 ## Runtime behavior
 
