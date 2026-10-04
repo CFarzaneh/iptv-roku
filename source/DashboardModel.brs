@@ -11,7 +11,9 @@ function dashboardUuid() as string
 end function
 
 function dashboardNow() as double
-    return CreateObject("roDateTime").AsSeconds() * 1000.0
+    ' The # suffix keeps epoch milliseconds in double precision. A Float
+    ' rounds current timestamps into intervals of roughly two minutes.
+    return CreateObject("roDateTime").AsSeconds() * 1000#
 end function
 
 ' BrightScript's unquoted associative-array keys become lowercase. Restore the

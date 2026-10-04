@@ -78,10 +78,10 @@ pnpm build
 AWS_PROFILE=cam node scripts/publish-dashboard.mjs
 python3 ../tools/package_personalized.py my-roku \
   --dashboard .private/my-roku/dashboard.json --provider-config ../config.json \
-  --output ../builds/my-roku-v1.0.22.zip
+  --output ../builds/my-roku-v1.0.23.zip
 python3 ../tools/package_personalized.py dads-roku \
   --dashboard .private/dads-roku/dashboard.json --empty-provider \
-  --output ../builds/dads-roku-v1.0.22.zip
+  --output ../builds/dads-roku-v1.0.23.zip
 ```
 
 The current TV's favorites/recents recovery seed can be captured before replacing its sideload. From a computer on the same LAN, run `python3 ../tools/backup_roku_store.py ROKU_LAN_IP`; it uses Roku's read-only developer-mode `query/registry/dev` endpoint and saves only validated lists and the developer ID under ignored `backups/`. Roku may require **Settings → System → Advanced system settings → Control by mobile apps → Enabled** for this endpoint. If Dad is replacing an existing sideload, capture his Roku's store separately from his home network. The owner elected to build My Roku's October 3 package without a restore seed; a sideload failure or registry reset could erase favorites and recents. The earlier v1.0.20 ZIP remains untouched. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
