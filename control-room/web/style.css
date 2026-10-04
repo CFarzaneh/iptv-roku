@@ -150,7 +150,8 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 2
 .login-panel { width: min(100%, 460px); padding: 0 32px 32px; border: 1px solid #33516e; border-top: 3px solid var(--orange); border-radius: 10px; background: linear-gradient(160deg, #142a45, #0d1b30 65%); box-shadow: 0 30px 100px #0208127a; }
 .login-top { display: flex; align-items: center; padding: 25px 0; border-bottom: 1px solid var(--line); }
 .login-copy { padding: 28px 0 24px; }
-.login-copy h1 { font-size: 30px; letter-spacing: -.7px; }
+.login-copy h1 { margin-top: 9px; font-size: 30px; letter-spacing: -.7px; }
+.login-copy p { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .login-panel .primary { width: 100%; }
 .setup { padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: #0b1a2d; color: var(--muted); font-size: 12px; }
 .entry { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px; color: var(--muted); font-size: 13px; }
