@@ -1,6 +1,6 @@
 # IPTV control room — system design
 
-Updated October 4, 2026. This supersedes the Lightsail relay design. The CDK stack deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. The API and temporary mailbox passed live cloud checks, and the owner has used the dashboard with My Roku. Dad's Roku is not yet provisioned.
+Updated October 4, 2026. This supersedes the Lightsail relay design. The CDK stack deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. The API and temporary mailbox passed live cloud checks, and the owner has used the dashboard with My Roku. Dad's authorization is deployed, but his Roku has not yet established a session or been validated on hardware.
 
 ## Accepted scope
 

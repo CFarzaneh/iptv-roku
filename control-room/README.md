@@ -77,7 +77,7 @@ pnpm provision my-roku 'My Roku' https://YOUR_FUNCTION_URL VERIFIED_DEVELOPER_ID
 pnpm provision dads-roku 'Dad’s Roku' https://YOUR_FUNCTION_URL VERIFIED_DEVELOPER_ID
 ```
 
-The resulting `dashboard.json` and `authorization.json` are ignored and must not be shared between TVs. Update `.private/server.json` with both authorization entries, then redeploy the stack. A new app process authenticates using its installation secret plus a fresh Roku-signed attestation. The app has no dashboard-pairing form. Dad's Roku has not yet been provisioned; its verified developer ID is needed before creating its authorization entry.
+The resulting `dashboard.json` and `authorization.json` are ignored and must not be shared between TVs. Update `.private/server.json` with both authorization entries, then redeploy the stack. A new app process authenticates using its installation secret plus a fresh Roku-signed attestation. The app has no dashboard-pairing form. Dad's authorization entry was deployed on October 4, 2026; the device has not yet established a session, so the sideload and hardware behavior still need validation.
 
 Build the dashboard, publish it to Amplify, and build separate private Roku ZIPs. Creating a ZIP does not install it:
 
