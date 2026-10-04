@@ -59,5 +59,5 @@ export const serverConfig = z.object({
     id: z.string().regex(/^[a-z0-9-]{1,60}$/), label: text,
     secretHash: z.string().regex(/^[a-f0-9]{64}$/), enabled: z.boolean(),
     developerId: id, channelId: id.default('dev'),
-  }).strict()).min(1).max(10),
+  }).strict()).max(10),
 }).strict().refine(v => new Set(v.devices.map(d => d.id)).size === v.devices.length, 'Duplicate devices');

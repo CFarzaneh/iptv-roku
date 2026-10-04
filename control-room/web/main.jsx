@@ -48,6 +48,7 @@ function App() {
               else p.resolve(result);
             }
           }
+          await new Promise(resolve => setTimeout(resolve, document.hidden ? 10000 : 2500));
         } catch (e) {
           if (controller.signal.aborted) break;
           setLink('Reconnecting'); setError(e.message);

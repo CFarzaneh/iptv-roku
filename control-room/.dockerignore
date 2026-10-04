@@ -1,7 +1,0 @@
-*
-!Dockerfile
-!package.json
-!pnpm-lock.yaml
-!pnpm-workspace.yaml
-!server/
-!server/**

@@ -23,35 +23,19 @@ sub dashboardRun()
     m.renewAt = 0.0
     m.retryAt = 0.0
     m.backoff = 1000.0
-    m.lastReportAt = 0.0
-    m.poll = invalid
-    m.post = invalid
-    m.firstReport = true
+    m.lastSyncAt = 0.0
+    m.sync = invalid
     while not m.top.shutdown
         now = dashboardNow()
         if m.snapshot <> invalid and now >= m.retryAt
             if m.sessionToken = "" or now >= m.renewAt
-                if m.poll <> invalid then m.poll.AsyncCancel()
-                if m.post <> invalid then m.post.AsyncCancel()
-                m.poll = invalid
-                m.post = invalid
+                if m.sync <> invalid then m.sync.AsyncCancel()
+                m.sync = invalid
                 m.sessionToken = ""
                 dashboardAuthenticate()
             end if
-            if m.sessionToken <> ""
-                if m.post = invalid
-                    if m.firstReport or now - m.lastReportAt >= 5000
-                        dashboardPost("/device/reports", m.snapshot, "report")
-                        m.lastReportAt = now
-                    else if m.queue.Count() > 0
-                        dashboardPost("/device/results", m.queue.Shift(), "result")
-                    end if
-                end if
-                if m.poll = invalid and not m.firstReport
-                    m.poll = dashboardTransfer("/device/commands", m.sessionToken, m.port)
-                    m.pollStarted = now
-                    if not m.poll.AsyncGetToString() then dashboardDisconnect()
-                end if
+            if m.sessionToken <> "" and m.sync = invalid and now - m.lastSyncAt >= 2000
+                dashboardSync()
             end if
         end if
         ev = wait(100, m.port)
@@ -62,18 +46,11 @@ sub dashboardRun()
                 if m.queue.Count() < 24 then m.queue.Push(ev.GetData())
             end if
         else if type(ev) = "roUrlEvent"
-            dashboardResponse(ev)
+            dashboardSyncResponse(ev)
         end if
-        now = dashboardNow()
-        if m.poll <> invalid
-            if now - m.pollStarted > 35000 then dashboardDisconnect()
-        end if
-        if m.post <> invalid
-            if now - m.postStarted > 15000 then dashboardDisconnect()
-        end if
+        if m.sync <> invalid and dashboardNow() - m.syncStarted > 15000 then dashboardDisconnect()
     end while
-    if m.poll <> invalid then m.poll.AsyncCancel()
-    if m.post <> invalid then m.post.AsyncCancel()
+    if m.sync <> invalid then m.sync.AsyncCancel()
 end sub
 
 function dashboardTransfer(path as string, token as string, port as object) as object
@@ -122,54 +99,43 @@ sub dashboardAuthenticate()
     end if
     m.sessionToken = session.sessionToken
     m.renewAt = dashboardNow() + 840000
-    m.firstReport = true
+    m.lastSyncAt = 0
     m.backoff = 1000
     m.retryAt = 0
     m.top.connectionState = "connected"
 end sub
 
-sub dashboardPost(path as string, body as object, kind as string)
-    m.post = dashboardTransfer(path, m.sessionToken, m.port)
-    m.postKind = kind
-    m.postStarted = dashboardNow()
-    if not m.post.AsyncPostFromString(FormatJson(body)) then dashboardDisconnect()
+sub dashboardSync()
+    batch = []
+    for each result in m.queue
+        batch.Push(result)
+    end for
+    m.sync = dashboardTransfer("/device/sync", m.sessionToken, m.port)
+    m.sentCount = batch.Count()
+    m.syncStarted = dashboardNow()
+    m.lastSyncAt = m.syncStarted
+    if not m.sync.AsyncPostFromString(FormatJson({ snapshot: m.snapshot, results: batch })) then dashboardDisconnect()
 end sub
 
-sub dashboardResponse(ev as object)
+sub dashboardSyncResponse(ev as object)
+    if m.sync = invalid then return
+    if ev.GetSourceIdentity() <> m.sync.GetIdentity() then return
     code = ev.GetResponseCode()
-    if m.poll <> invalid
-        if ev.GetSourceIdentity() = m.poll.GetIdentity()
-            m.poll = invalid
-            if code = 200
-                data = ParseJson(ev.GetString())
-                if data <> invalid and data.commands <> invalid
-                    for each command in data.commands
-                        m.top.incoming = command
-                    end for
-                end if
-            else
-                dashboardDisconnect()
-            end if
-            return
-        end if
+    m.sync = invalid
+    if code <> 200
+        dashboardDisconnect()
+        return
     end if
-    if m.post <> invalid
-        if ev.GetSourceIdentity() = m.post.GetIdentity()
-            m.post = invalid
-            if code = 200
-                if m.postKind = "report" then m.firstReport = false
-            else if code <> 409
-                dashboardDisconnect()
-            end if
-        end if
-    end if
+    for i = 1 to m.sentCount
+        if m.queue.Count() > 0 then m.queue.Shift()
+    end for
+    data = ParseJson(ev.GetString())
+    if data <> invalid and data.command <> invalid then m.top.incoming = data.command
 end sub
 
 sub dashboardDisconnect()
-    if m.poll <> invalid then m.poll.AsyncCancel()
-    if m.post <> invalid then m.post.AsyncCancel()
-    m.poll = invalid
-    m.post = invalid
+    if m.sync <> invalid then m.sync.AsyncCancel()
+    m.sync = invalid
     m.sessionToken = ""
     m.top.connectionState = "reconnecting"
     m.retryAt = dashboardNow() + m.backoff + Rnd(1000)

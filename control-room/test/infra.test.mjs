@@ -1,30 +1,43 @@
 import test from 'node:test';
-import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { App } from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
 import { ControlRoomStack } from '../infra/stack.mjs';
+import { rokuAttestationCertificates } from '../server/roku-certificates.mjs';
 
-test('CDK provisions private login and hosting without a billable idle relay or database', () => {
+test('CDK retains private login and hosting, adds one small TTL mailbox, and removes Lightsail', () => {
   const app = new App();
   const stack = new ControlRoomStack(app, 'Test', { env: { account: '123456789012', region: 'us-east-2' } });
   const template = Template.fromStack(stack);
   template.hasResourceProperties('AWS::Cognito::UserPool', { AdminCreateUserConfig: { AllowAdminCreateUserOnly: true } });
   template.hasResourceProperties('AWS::Cognito::UserPoolClient', { GenerateSecret: false, AllowedOAuthFlows: ['code'] });
-  template.resourceCountIs('AWS::Lightsail::Container', 0);
+  template.hasResourceProperties('AWS::DynamoDB::Table', {
+    TableName: 'iptv-control-room', TimeToLiveSpecification: { AttributeName: 'expiresAt', Enabled: true },
+    ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
+  });
   template.resourceCountIs('AWS::Amplify::App', 1);
-  template.resourceCountIs('AWS::DynamoDB::Table', 0);
+  template.resourceCountIs('AWS::Lightsail::Container', 0);
+  template.resourceCountIs('AWS::IAM::OIDCProvider', 0);
   template.resourceCountIs('AWS::SecretsManager::Secret', 0);
-  template.resourceCountIs('AWS::S3::Bucket', 0);
-  assert.equal(stack.region, 'us-east-2');
-  assert.equal(template.toJSON().Parameters?.BootstrapVersion, undefined);
+  template.resourceCountIs('AWS::ApiGateway::RestApi', 0);
+  template.resourceCountIs('AWS::Lambda::Function', 0);
 });
 
-test('enabling the relay adds one Lightsail service and a GitHub image-only role', () => {
-  const app = new App();
-  const stack = new ControlRoomStack(app, 'RelayTest', { env: { account: '123456789012', region: 'us-east-2' },
-    enableRelay: true, githubSubject: 'repo:CFarzaneh@1896372/iptv-roku@1403768016:ref:refs/heads/main' });
-  const template = Template.fromStack(stack);
-  template.hasResourceProperties('AWS::Lightsail::Container', { Scale: 1, Power: 'nano' });
-  template.resourceCountIs('AWS::IAM::OIDCProvider', 1);
-  template.resourceCountIs('AWS::IAM::Role', 1);
+test('private configuration adds one Lambda Function URL with no video infrastructure', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'iptv-cdk-test-'));
+  const path = join(dir, 'server.json');
+  writeFileSync(path, JSON.stringify({ region: 'us-east-2', origins: ['https://example.com'],
+    userPoolId: 'us-east-2_example', clientId: 'example', adminSub: 'example',
+    attestationCertificates: rokuAttestationCertificates, devices: [] }));
+  try {
+    const app = new App();
+    const stack = new ControlRoomStack(app, 'ApiTest', { env: { account: '123456789012', region: 'us-east-2' }, configurationPath: path });
+    const template = Template.fromStack(stack);
+    template.resourceCountIs('AWS::Lambda::Function', 1);
+    template.resourceCountIs('AWS::Lambda::Url', 1);
+    template.resourceCountIs('AWS::DynamoDB::Table', 1);
+    template.resourceCountIs('AWS::Lightsail::Container', 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

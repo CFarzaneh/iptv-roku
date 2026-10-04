@@ -31,7 +31,7 @@ components/           SceneGraph components (screens, cards) + tasks/ (async con
 images/               Splash screens and channel/app icons
 epg/                  EPG generator (Python) — see epg/README.md
 .github/workflows/    GitHub Action that regenerates the EPG on a schedule
-control-room/         React dashboard, Node.js relay, tests, and AWS CDK (us-east-2)
+control-room/         React dashboard, Lambda/DynamoDB API, tests, and AWS CDK (us-east-2)
 ```
 
 ## Website control room
@@ -39,7 +39,7 @@ control-room/         React dashboard, Node.js relay, tests, and AWS CDK (us-eas
 The [control-room application](control-room/README.md) adds one private login for two
 TVs, on-device channel catalogs with existing provider IDs, remote tuning, playback
 metrics, and provider credential replacement. AWS CDK provisions Amplify Hosting,
-Cognito, and a single Lightsail container in `us-east-2`. Software updates are deferred.
+Cognito, a Lambda Function URL, and a small DynamoDB mailbox in `us-east-2`. Software updates are deferred.
 The app's direct playback does not depend on AWS. A personalized, gitignored
 `source/dashboard.json` enables its background connection; without it cloud controls
 remain dormant. Device attestation and playback reporting still require hardware validation.

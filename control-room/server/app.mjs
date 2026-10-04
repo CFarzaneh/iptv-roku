@@ -8,7 +8,8 @@ import * as schema from './schema.mjs';
 export function createApp(config, verifiers, options = {}) {
   const app = Fastify({ logger: false, bodyLimit: 256 * 1024, requestTimeout: 40000, trustProxy: false });
   const now = options.now || Date.now;
-  const auth = new Auth(config, verifiers, now), relay = new Relay(config.devices, now);
+  const auth = options.auth || new Auth(config, verifiers, now);
+  const relay = options.relay || new Relay(config.devices, now);
   app.decorate('authState', auth); app.decorate('relay', relay);
   app.register(cors, { origin: config.origins, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] });
   app.addHook('onSend', async (_request, reply) => {
@@ -28,8 +29,8 @@ export function createApp(config, verifiers, options = {}) {
     try { await verifiers.admin(bearer(request)); }
     catch (e) { if (e instanceof ApiError) throw e; throw new ApiError(401, 'UNAUTHORIZED'); }
   };
-  const device = request => {
-    const token = bearer(request), session = auth.device(token);
+  const device = async request => {
+    const token = bearer(request), session = await auth.device(token);
     rate(`device:${session.deviceId}`, 300);
     return { token, session };
   };
@@ -53,36 +54,47 @@ export function createApp(config, verifiers, options = {}) {
     return view;
   });
   app.post('/devices/:id/commands', { preHandler: admin }, async (request, reply) =>
-    reply.code(202).send(relay.enqueue(request.params.id, schema.tune.parse(request.body), 'changeChannel')));
+    reply.code(202).send(await relay.enqueue(request.params.id, schema.tune.parse(request.body), 'changeChannel')));
   app.post('/devices/:id/catalog-requests', { preHandler: admin }, async (request, reply) =>
-    reply.code(202).send(relay.enqueue(request.params.id, schema.catalog.parse(request.body), 'catalog')));
+    reply.code(202).send(await relay.enqueue(request.params.id, schema.catalog.parse(request.body), 'catalog')));
   app.post('/devices/:id/provider-config', { preHandler: admin }, async (request, reply) =>
-    reply.code(202).send(relay.enqueue(request.params.id, schema.provider.parse(request.body), 'providerConfig')));
+    reply.code(202).send(await relay.enqueue(request.params.id, schema.provider.parse(request.body), 'providerConfig')));
   app.post('/device/auth/challenge', async request => {
     rate('authentication', 60);
-    return auth.challenge(bearer(request));
+    return await auth.challenge(bearer(request));
   });
   app.post('/device/auth/session', async request => {
     rate('authentication', 60);
     const body = z.object({ challengeId: z.string().max(100), attestation: z.string().max(16384), appSessionId: z.string().min(1).max(160) }).strict().parse(request.body);
-    return auth.session(bearer(request), body);
+    return await auth.session(bearer(request), body);
+  });
+  app.post('/device/sync', async request => {
+    const { session } = await device(request);
+    const body = z.object({ snapshot: schema.snapshot,
+      results: z.array(schema.result).max(24).default([]) }).strict().parse(request.body);
+    requireThat(typeof relay.sync === 'function', 410, 'SYNC_UNAVAILABLE');
+    return await relay.sync(session.deviceId, session, body);
   });
   app.get('/device/commands', async (request, reply) => {
-    const { token, session } = device(request);
+    const { token, session } = await device(request);
+    requireThat(typeof relay.poll === 'function', 410, 'SYNC_REQUIRED');
     return relay.poll(session.deviceId, session, signalFor(request, reply), () => auth.device(token));
   });
   app.post('/device/reports', async request => {
-    const { session } = device(request);
-    relay.report(session.deviceId, session, schema.snapshot.parse(request.body));
+    const { session } = await device(request);
+    requireThat(typeof relay.report === 'function', 410, 'SYNC_REQUIRED');
+    await relay.report(session.deviceId, session, schema.snapshot.parse(request.body));
     return { ok: true };
   });
   app.post('/device/results', async request => {
-    const { session } = device(request);
-    relay.result(session.deviceId, session, schema.result.parse(request.body));
+    const { session } = await device(request);
+    await relay.result(session.deviceId, session, schema.result.parse(request.body));
     return { ok: true };
   });
-  const sweep = setInterval(() => { for (const d of relay.devices.values()) relay.prune(d); }, 5000);
-  sweep.unref();
-  app.addHook('onClose', async () => { clearInterval(sweep); relay.close(); });
+  if (typeof relay.prune === 'function') {
+    const sweep = setInterval(() => { for (const d of relay.devices.values()) relay.prune(d); }, 5000);
+    sweep.unref();
+    app.addHook('onClose', async () => { clearInterval(sweep); relay.close(); });
+  }
   return app;
 }

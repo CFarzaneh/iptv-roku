@@ -2,7 +2,9 @@
   "name": "iptv-control-room",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
@@ -13,9 +15,13 @@
     "aws:diff": "node scripts/cdk-with-login.mjs diff",
     "aws:deploy": "node scripts/cdk-with-login.mjs deploy",
     "admin:create": "node scripts/create-admin.mjs",
+    "config:assemble": "node scripts/assemble-server-config.mjs",
     "synth": "cdk synth --quiet"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1146.0",
+    "@aws-sdk/lib-dynamodb": "^3.1146.0",
+    "@fastify/aws-lambda": "^6.4.1",
     "@fastify/cors": "^11.0.0",
     "aws-jwt-verify": "^5.0.0",
     "fastify": "^5.0.0",
@@ -24,5 +30,11 @@
     "react-dom": "^19.0.0",
     "zod": "^4.0.0"
   },
-  "devDependencies": { "vite": "^7.0.0", "aws-cdk": "^2.1000.0", "aws-cdk-lib": "^2.220.0", "constructs": "^10.0.0" }
+  "devDependencies": {
+    "aws-cdk": "^2.1000.0",
+    "aws-cdk-lib": "^2.220.0",
+    "constructs": "^10.0.0",
+    "esbuild": "^0.28.2",
+    "vite": "^7.0.0"
+  }
 }

@@ -1,101 +1,81 @@
 # Signal: IPTV control room
 
-React dashboard, Node.js relay, and AWS CDK infrastructure for two privately sideloaded Roku installations. Region: **us-east-2**. AWS CLI profile used during development: **cam**. Software-update support is intentionally deferred.
+One private React dashboard controls two personalized, developer-mode Roku sideloads. AWS CDK deploys Amplify Hosting, Cognito, a Lambda Function URL, and a DynamoDB Standard mailbox in **us-east-2**. The Rokus continue to fetch provider catalogs and play IPTV directly. [System design](../docs/iptv-dashboard-system-design.md).
 
-## Repository layout
+## Layout and boundaries
 
-- `../source`, `../components`: existing Roku app plus DashboardTask, DashboardBridge, and player telemetry.
-- `server`: device attestation, Cognito verification, transient command mailboxes, API.
+- `../source` and `../components`: existing Roku player plus DashboardTask, DashboardBridge, and telemetry.
+- `server/lambda.mjs`, `server/dynamo.mjs`: stateless Lambda API, hashed device sessions, latest snapshots, temporary commands/results.
+- `server/app.mjs`, `server/schema.mjs`: shared HTTP routes and strict request/response schemas.
 - `web`: responsive dashboard and Cognito authorization-code/PKCE login.
-- `infra`: CDK v2 stack for Amplify Hosting, Cognito, and one Lightsail container.
-- `test`: isolation, replay, expiry, credential privacy, and infrastructure tests.
-- `.private`: ignored local provisioning/deployment files. Never commit it.
+- `infra`: CDK v2 CloudFormation stack. No Lightsail, API Gateway, VM, or video proxy.
+- `.private`: ignored admin, device authorization, and deployment configuration. Never commit it. The public Roku attestation certificate is bundled from `server/roku-certificates.mjs`.
 
-## Development
+Software releases in S3 and full sideload updating remain a later phase. The older in-memory `server/state.mjs` supports local tests only; it is not deployed to Lambda.
 
-Install Node.js 22 or newer and pnpm 11.25.0, then:
+## Development checks
+
+Install Node.js 22+, pnpm 11.25.0, and Python. From this directory:
 
 ```sh
-cd control-room
 pnpm install --frozen-lockfile
 pnpm test
 pnpm build
 pnpm synth
-pnpm dev
 ```
 
-The dashboard intentionally shows a setup state until Cognito and API settings exist. Set `VITE_API_URL`, `VITE_COGNITO_DOMAIN`, and `VITE_COGNITO_CLIENT_ID` in ignored `.env.local`, or place public deployment settings in `dist/runtime-config.json` after building. Register the exact local callback origin in a separate development Cognito client before using localhost login. Tokens are held in memory, and reloading signs in again through Cognito; only the short-lived PKCE state/verifier uses sessionStorage.
+From the repository root, also run `pnpm check` and `python3 tools/check_node_refs.py` before building a Roku ZIP. Hardware validation remains necessary even when compilation passes.
 
-No production authentication bypass or demo credentials are compiled into the app. Tests inject verifiers into the application factory. Production always loads trusted Roku certificates and Cognito verification.
+## AWS profile and CloudFormation
 
-## AWS login on macOS
+Use AWS CLI v2 with the already configured `cam` profile. `scripts/cdk-with-login.mjs` bridges AWS console-login credentials to CDK without writing access keys into Git. The AWS profile must resolve to the intended account:
 
 ```sh
-curl -fsSL https://awscli.amazonaws.com/v2/install.sh | bash
-export PATH="$HOME/.local/bin:$PATH"
-aws configure set region us-east-2 --profile cam
 aws login --profile cam
 aws sts get-caller-identity --profile cam
 ```
 
-The console-login flow requires AWS CLI >=2.32.0 and `SignInLocalDevelopmentAccess` for the IAM identity. Identity Center users instead configure `aws configure sso --profile cam`. No access keys belong in this repository. See the [AWS console-login guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html).
-
-## Deployment
-
-First inspect and deploy the CDK infrastructure. This creates Cognito and Amplify. Lightsail is created in a separate deployment, so the initial website deployment does not start a billable idle service.
+CDK bootstrap is required once in `us-east-2` to publish the bundled Lambda asset. Bootstrap and the app stack are CloudFormation deployments:
 
 ```sh
-AWS_PROFILE=cam pnpm aws:diff
-AWS_PROFILE=cam pnpm aws:deploy --outputs-file .private/outputs.json
-pnpm build
-AWS_PROFILE=cam node scripts/publish-dashboard.mjs
+AWS_PROFILE=cam node scripts/cdk-with-login.mjs bootstrap aws://ACCOUNT_ID/us-east-2
+AWS_PROFILE=cam pnpm aws:diff -c relayConfig=.private/server.json
+AWS_PROFILE=cam pnpm aws:deploy -c relayConfig=.private/server.json \
+  --require-approval never --outputs-file .private/outputs.json
 ```
 
-This stack uses no CDK assets; CDK bootstrap is not required for its current resources. S3 releases, application updates, and extra database services are deferred. Keep one Node process and one Lightsail node: mailboxes and sessions are intentionally RAM-only.
+The first stack deployment may omit `relayConfig` and creates Amplify, Cognito, and the DynamoDB table. Add Lambda after assembling a private configuration. Keep `relayConfig` on later deployments; omitting it removes the API from the CloudFormation template. The `ApiUrl`/`RelayUrl` stack output is the managed HTTPS Function URL. The public URL authenticates each browser and Roku request in application code; CORS alone is not security.
 
-Create the one administrator in Cognito without sending an invitation email. The script saves a temporary first-login password and the resulting Cognito `sub` only under ignored `.private/`. Complete the initial password change through the hosted login. No public signups are permitted.
+## Private administrator and device provisioning
+
+The sole Cognito administrator is created without a signup flow or invitation email. The script writes a temporary first-login password and Cognito `sub` under ignored `.private/`:
 
 ```sh
 AWS_PROFILE=cam pnpm admin:create YOUR_ADMIN_EMAIL
 ```
 
-Obtain the official Roku attestation certificate and verify a challenge from each actual sideloaded installation. Record its expected developerId and channelId. Do not assume channelId `dev` proves an exact binary or physical TV. Never load verification keys from JWT-supplied URLs. Configure overlapping trusted certificates during Roku signing-key rotation.
-
-When you are ready to activate the backend, create the one Lightsail service and its tightly scoped GitHub Actions image-builder role. The service becomes billable at this step. It has no public app until the image and private configuration are deployed:
+Use the official Roku device-attestation certificate and verify each physical sideload's developer ID and channel ID. The provided app ZIP is not proof of a physical Roku identity. Build `.private/server.json` from the admin metadata, the trusted certificate, and zero or more verified device authorization files:
 
 ```sh
-AWS_PROFILE=cam pnpm aws:deploy -c enableRelay=true --outputs-file .private/outputs.json
+pnpm config:assemble .private/my-roku/authorization.json .private/dads-roku/authorization.json
 ```
 
-The `RelayServiceUrl` stack output is the HTTPS endpoint to pass to `pnpm provision` for each Roku. `RelayUrl` appears only after an image and private configuration are deployed, so the published dashboard will not try to contact an unconfigured service.
+For an initial backend with no enrolled Rokus, run `pnpm config:assemble` without paths. That creates a working API and dashboard with an empty device list. The script refuses to overwrite an existing configuration; prepare a revised file deliberately when adding devices. The public certificate in `.private/roku-attestation.pem` must match the bundled certificate module; CDK rejects a mismatch. Never put raw installation secrets or provider credentials in the Lambda configuration. It contains only installation-secret hashes and device IDs; the public attestation certificate is in the Lambda bundle.
 
-Generate each installation identity separately:
+After deployment, provision a separate identity for each Roku using the Function URL output:
 
 ```sh
-pnpm provision my-roku 'My Roku' https://YOUR_RELAY_SERVICE_URL VERIFIED_DEVELOPER_ID
-pnpm provision dads-roku 'Dad’s Roku' https://YOUR_RELAY_SERVICE_URL VERIFIED_DEVELOPER_ID
+pnpm provision my-roku 'My Roku' https://YOUR_FUNCTION_URL VERIFIED_DEVELOPER_ID
+pnpm provision dads-roku 'Dad’s Roku' https://YOUR_FUNCTION_URL VERIFIED_DEVELOPER_ID
 ```
 
-Assemble `.private/server.json` matching `server/schema.mjs`: region, origins, Cognito userPoolId/clientId/adminSub, PEM attestationCertificates, and device authorization entries. Hashes are stored on the backend; plaintext installation secrets go only into their respective personalized Roku packages. Run the backend locally with `CONTROL_ROOM_CONFIG=.private/server.json pnpm start`.
+The resulting `dashboard.json` and `authorization.json` are ignored and must not be shared between TVs. Update `.private/server.json` with both authorization entries, then redeploy the stack. A new app process authenticates using its installation secret plus a fresh Roku-signed attestation. The app has no dashboard-pairing form.
 
-Run the `Build relay image` workflow on the fork's `main` branch. GitHub Actions builds Docker without needing Docker installed on this Mac, assumes the AWS role through a repository-and-branch-bound OIDC trust policy, and pushes only the strict `control-room` Docker context to Lightsail. It reports the immutable image name, such as `:iptv-control-room.relay.1`. For a local build instead, with Docker and the AWS Lightsail control plugin installed:
+Build the dashboard, publish it to Amplify, and build separate private Roku ZIPs. Creating a ZIP does not install it:
 
 ```sh
-docker build --platform linux/amd64 -t iptv-control-room:local .
-aws lightsail push-container-image --profile cam --region us-east-2 \
-  --service-name iptv-control-room --label relay --image iptv-control-room:local
-# Use the immutable image name returned above, such as :iptv-control-room.relay.1:
-AWS_PROFILE=cam pnpm aws:deploy -c enableRelay=true -c relayImage=RETURNED_IMAGE_NAME \
-  -c relayConfig=.private/server.json --outputs-file .private/outputs.json
 pnpm build
 AWS_PROFILE=cam node scripts/publish-dashboard.mjs
-```
-
-The default Amplify URL and Cognito redirects come from CDK. The publish script uploads only the built dashboard. CDK overrides relay origins and Cognito identifiers with the actual stack resources. CDK output is ignored because it can contain private authorization metadata. Keep the relayImage/relayConfig context on subsequent deployments so a redeploy does not remove the application configuration.
-
-Build a separate private ZIP for each TV. The packager reads its dashboard identity directly without modifying the shared source tree, and it excludes any restore seed unless you explicitly select one. For the current TV, capture its favorites first and require that seed when building. Dad's fresh install can start with an empty provider and receive its credentials later through the dashboard. If Dad is replacing an existing sideload, capture his favorites on his device first.
-
-```sh
 python3 ../tools/package_personalized.py my-roku \
   --dashboard .private/my-roku/dashboard.json --provider-config ../config.json \
   --restore-seed ../source/restore.json --require-restore \
@@ -105,20 +85,18 @@ python3 ../tools/package_personalized.py dads-roku \
   --output ../builds/dads-roku-v1.0.20.zip
 ```
 
-Never reuse one personalized package for both TVs. The ZIPs contain provider credentials or installation secrets and stay under ignored `builds/`. Creating a ZIP does not install it. A missing `source/dashboard.json` leaves cloud control dormant.
+The current TV's favorites/recents recovery seed must be captured and verified before replacing its sideload. If Dad is replacing an existing sideload, capture his Roku's store separately. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
 
-## Behavior and boundaries
+## Runtime behavior
 
-- Direct provider-to-Roku playback; no video proxy in AWS. Existing local AAC repair stays unchanged.
-- Provider `stream_id` is retained. M3U `tvg-id` is used if unique; ambiguous entries receive local IDs tied to the catalog revision.
-- Categories and paged channel metadata are obtained from the Roku. Credentials and stream URLs are never exported in catalog replies.
-- One outstanding 25-second command poll per app session; separate telemetry/results requests. Commands expire, are deduplicated on-device, and check catalog/playback revisions.
-- Sessions require installation-secret possession plus fresh Roku attestation. They expire after 15 minutes. Browser and device permissions are separate.
-- Provider replacement is validated on the device, saved in one registry record, and **applies on the next app launch in this first implementation**. Current playback is not interrupted. The form and UI explicitly state this limitation; immediate/next-tune application remains follow-up work.
-- Media counters aggregate reported successful segments, not complete device/network traffic. No bandwidth proxy is introduced. Hardware validation is required for reporting completeness and event ordering.
-- App exit/offline stops remote control. Backend restarts discard in-memory commands and sessions; clients authenticate again. No automatic stale-command replay.
-- Lightsail terminates HTTPS before its HTTP connection to Node. Provider credentials are transient plaintext in the relay process; request/body logging is disabled.
+- Roku sends one short asynchronous `POST /device/sync` about every two seconds while the IPTV app is active. It carries a snapshot and queued acknowledgments and receives at most one command.
+- Browser polls current status/results while visible and slows down when hidden. Commands expire quickly and check source/catalog/playback revisions. The Roku deduplicates command IDs.
+- Xtream `stream_id` is retained. M3U `tvg-id` is used only when unique; otherwise the Roku provides a catalog-scoped local ID. The browser never receives credential-bearing stream URLs.
+- Provider replacement is sent as a short-lived DynamoDB command, validated and stored by the Roku, and applies on the next app launch in this version. Lambda and DynamoDB temporarily see the candidate credentials; logs do not.
+- DynamoDB TTL cleanup is asynchronous. Every read also checks the logical deadline, and expired sensitive commands are explicitly deleted. The table does not hold viewing history or a full catalog.
+- Session/media counters come from reported player data, not a network proxy. Missing metrics display unavailable. Cloud failures cannot interrupt direct local playback.
+- A Lambda Function URL terminates public HTTPS. Application code verifies Cognito access JWTs for browser requests and a short-lived attested device session for Roku requests.
 
-## Before first TV deployment
+After deploying, `AWS_PROFILE=iptv-cdk-process AWS_CONFIG_FILE=.private/aws-cdk-config node scripts/smoke-dynamo.mjs` exercises an isolated temporary mailbox record and deletes it. Run this only against the intended account and table.
 
-Run the root BrightScript compiler and `python3 tools/check_node_refs.py`, as well as `pnpm test`, `pnpm build`, and `pnpm synth` here. Test actual attestation, simultaneous polls/reports, physical-remote races, failed credential validation, source changes, and segment measurements on hardware. Compile success does not establish Roku runtime correctness. Preserve existing registry backups before replacing a sideloaded app. No remote updater is implemented yet.
+Before claiming either TV is remotely controllable, validate actual Roku attestation, concurrent syncs, physical-remote races, stale-command rejection, failed provider validation, and telemetry on hardware. The full sideload package updater remains out of scope until the control room works safely.
