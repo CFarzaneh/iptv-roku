@@ -86,10 +86,10 @@ pnpm build
 AWS_PROFILE=cam node scripts/publish-dashboard.mjs
 python3 ../tools/package_personalized.py my-roku \
   --dashboard .private/my-roku/dashboard.json --provider-config ../config.json \
-  --output ../builds/my-roku-v1.0.23.zip
+  --output ../builds/my-roku-v1.0.24.zip
 python3 ../tools/package_personalized.py dads-roku \
   --dashboard .private/dads-roku/dashboard.json --empty-provider \
-  --output ../builds/dads-roku-v1.0.23.zip
+  --output ../builds/dads-roku-v1.0.24.zip
 ```
 
 The current TV's favorites/recents recovery seed can be captured before replacing its sideload. From a computer on the same LAN, run `python3 ../tools/backup_roku_store.py ROKU_LAN_IP`; it uses Roku's read-only developer-mode `query/registry/dev` endpoint and saves only validated lists and the developer ID under ignored `backups/`. Roku may require **Settings → System → Advanced system settings → Control by mobile apps → Enabled** for this endpoint. If Dad is replacing an existing sideload, capture his Roku's store separately from his home network. The owner elected to build My Roku's October 3 package without a restore seed; a sideload failure or registry reset could erase favorites and recents. The earlier v1.0.20 ZIP remains untouched. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
@@ -101,6 +101,7 @@ The current TV's favorites/recents recovery seed can be captured before replacin
 - Xtream `stream_id` is retained. M3U `tvg-id` is used only when unique; otherwise the Roku provides a catalog-scoped local ID. The browser never receives credential-bearing stream URLs.
 - Provider replacement is sent as a short-lived DynamoDB command, validated and stored by the Roku, and applies on the next app launch in this version. Lambda and DynamoDB temporarily see the candidate credentials; logs do not.
 - A new private sideload built with `--empty-provider` contains no provider credentials. It displays a waiting screen rather than forcing Roku keyboard setup; when the dashboard sends the first valid provider settings, the Roku saves them and loads the catalog automatically. The package still contains that device's dashboard installation secret.
+- The waiting screen displays a brief dashboard connection diagnostic if first-time device authentication fails. It contains only a status code or generic error, never credentials or attestation tokens.
 - DynamoDB TTL cleanup is asynchronous. Every read also checks the logical deadline, and expired sensitive commands are explicitly deleted. The table does not hold viewing history or a full catalog.
 - Session/media counters come from reported player data, not a network proxy. Missing metrics display unavailable. Cloud failures cannot interrupt direct local playback.
 - A Lambda Function URL terminates public HTTPS. Application code verifies Cognito access JWTs for browser requests and a short-lived attested device session for Roku requests.

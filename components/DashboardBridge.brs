@@ -11,11 +11,17 @@ sub startDashboard()
     m.dashboardCatalogCache = {}
     m.dashboardTask = CreateObject("roSGNode", "DashboardTask")
     m.dashboardTask.observeField("incoming", "onDashboardIncoming")
+    m.dashboardTask.observeField("diagnostic", "onDashboardDiagnostic")
     m.playerScreen.observeField("dashboardSnapshot", "onDashboardPlayback")
     m.top.findNode("dashboardTimer").observeField("fire", "publishDashboardSnapshot")
     m.top.findNode("dashboardTimer").control = "start"
     publishDashboardSnapshot()
     m.dashboardTask.control = "RUN"
+end sub
+
+sub onDashboardDiagnostic()
+    m.dashboardDiagnostic = m.dashboardTask.diagnostic
+    if m.onboardingGroup.visible then m.top.findNode("onboardingMessage").text = m.dashboardDiagnostic
 end sub
 
 sub resetDashboardCatalog(res as object)

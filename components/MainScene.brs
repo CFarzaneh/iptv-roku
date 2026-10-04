@@ -202,7 +202,9 @@ sub showOnboarding(remoteProvisioning = false as boolean)
     hideAllScreens()
     m.onboardingGroup.visible = true
     if remoteProvisioning
-        m.top.findNode("onboardingMessage").text = "Waiting for provider settings from the dashboard."
+        message = "Waiting for provider settings from the dashboard."
+        if m.dashboardDiagnostic <> invalid and m.dashboardDiagnostic <> "" then message = m.dashboardDiagnostic
+        m.top.findNode("onboardingMessage").text = message
         m.onboardingOk.text = "Enter playlist URL manually"
     else
         m.top.findNode("onboardingMessage").text = "Enter your playlist URL to get started."

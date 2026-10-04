@@ -92,6 +92,7 @@ sub dashboardAuthenticate()
     challenge = dashboardAuthPost("/device/auth/challenge", {})
     if challenge = invalid or challenge.nonce = invalid
         print "CONTROL_ROOM challenge response invalid"
+        m.top.diagnostic = "Dashboard connection failed. Retrying..."
         dashboardDisconnect()
         return
     end if
@@ -99,17 +100,20 @@ sub dashboardAuthenticate()
     proof = store.GetDeviceAttestation(challenge.nonce)
     if proof = invalid
         print "CONTROL_ROOM attestation invalid"
+        m.top.diagnostic = "Roku verification unavailable. Retrying..."
         dashboardDisconnect()
         return
     end if
     if GetInterface(proof, "ifAssociativeArray") = invalid
         print "CONTROL_ROOM attestation unexpected type " + type(proof)
+        m.top.diagnostic = "Roku verification returned an invalid response."
         dashboardDisconnect()
         return
     end if
     token = dashboardText(proof.token)
     if proof.status <> 0 or token = ""
         print "CONTROL_ROOM attestation status " + dashboardText(proof.status) + " token-length " + Str(token.Len())
+        m.top.diagnostic = "Roku verification status " + dashboardText(proof.status) + ". Retrying..."
         dashboardDisconnect()
         return
     end if
@@ -117,6 +121,7 @@ sub dashboardAuthenticate()
     session = dashboardAuthPost("/device/auth/session", { challengeId: challenge.challengeId, attestation: token, appSessionId: m.snapshot.appSessionId })
     if session = invalid or session.sessionToken = invalid
         print "CONTROL_ROOM session response invalid"
+        m.top.diagnostic = "Dashboard authorization failed. Retrying..."
         dashboardDisconnect()
         return
     end if
@@ -126,6 +131,7 @@ sub dashboardAuthenticate()
     m.backoff = 1000
     m.retryAt = 0
     m.top.connectionState = "connected"
+    m.top.diagnostic = "Connected. Waiting for provider settings."
     print "CONTROL_ROOM connected"
 end sub
 

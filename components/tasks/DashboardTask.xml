@@ -7,6 +7,7 @@
     <field id="outgoing" type="assocarray" alwaysNotify="true"/>
     <field id="incoming" type="assocarray" alwaysNotify="true"/>
     <field id="connectionState" type="string"/>
+    <field id="diagnostic" type="string"/>
     <field id="shutdown" type="boolean"/>
   </interface>
 </component>
