@@ -23,6 +23,7 @@ function App() {
   const [tab, setTab] = useState('channels'), [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(''), [query, setQuery] = useState('');
   const [page, setPage] = useState(null), [loading, setLoading] = useState(false), [notice, setNotice] = useState('');
+  const [providerType, setProviderType] = useState('xtream');
   const [link, setLink] = useState('Connecting');
   const pending = useRef(new Map()), catalogGeneration = useRef(0);
   const selectedRef = useRef(selected); selectedRef.current = selected;
@@ -47,7 +48,11 @@ function App() {
             const p = pending.current.get(result.requestId);
             if (p && p.deviceId === d.id && !['received', 'tuning'].includes(result.status)) {
               pending.current.delete(result.requestId); clearTimeout(p.timer);
-              if (['failed', 'stale', 'expired'].includes(result.status)) p.reject(Error(result.status === 'expired' ? 'The Roku did not confirm the request in time.' : 'The Roku could not complete the request. Refresh and try again.'));
+              if (['failed', 'stale', 'expired'].includes(result.status)) {
+                const failure = Error(result.status === 'expired' ? 'The Roku did not confirm the request in time.' : 'The Roku could not complete the request. Refresh and try again.');
+                failure.code = result.code;
+                p.reject(failure);
+              }
               else p.resolve(result);
             }
           }
@@ -99,8 +104,15 @@ function App() {
     const values = Object.fromEntries(new FormData(form));
     const wasConfigured = Boolean(snapshot?.provider?.configured);
     setNotice('Validating provider settings on the Roku…'); setError('');
-    try { await request('provider-config', values); form.reset(); setNotice(wasConfigured ? 'Provider settings saved. Reopen the IPTV app to use them.' : 'Provider settings saved. Channels will load on the Roku shortly.'); }
-    catch (e) { setNotice(''); setError(e.message); }
+    try { await request('provider-config', values); form.reset(); setProviderType('xtream'); setNotice(wasConfigured ? 'Provider settings saved. Reopen the IPTV app to use them.' : 'Provider settings saved. Channels will load on the Roku shortly.'); }
+    catch (e) {
+      setNotice('');
+      setError(e.code === 'PROVIDER_ERROR'
+        ? values.providerType === 'm3u'
+          ? 'The Roku could not load channels from this playlist URL. Enter the complete M3U URL.'
+          : 'The Roku could not validate this account. Check the server address, username, and password.'
+        : e.message);
+    }
   }
   if (!ready) return <div className="entry"><Brand/><p>Connecting…</p></div>;
   if (!signedIn) return <div className="login"><main className="login-panel"><div className="login-top"><Brand/></div><div className="login-copy"><span className="eyebrow">DEVICE ADMINISTRATION</span><h1>Sign in</h1><p>View Roku status, change channels, and manage provider settings.</p></div>{error && <div role="alert" className="alert">{error}</div>}{configured ? <button className="primary" onClick={() => auth.login().catch(e => setError(e.message))}>Continue to sign in <Icon name="arrow" size={17}/></button> : <div className="setup">Sign-in is unavailable. Try again shortly.</div>}</main></div>;
@@ -129,7 +141,7 @@ function App() {
     {notice && <div className="notice" role="status">{notice}</div>}
     {tab === 'channels' && <section className="panel"><div className="catalog-toolbar"><form className="search" onSubmit={e => { e.preventDefault(); loadCatalog('search'); }}><Icon name="search"/><input aria-label="Search channels" placeholder="Find a channel…" value={query} onChange={e => setQuery(e.target.value)} disabled={!online}/><button disabled={!online || loading || !query.trim()}>Search</button></form><button className="secondary" disabled={!online || loading} onClick={() => loadCatalog()}><Icon name="refresh" size={16}/>Load categories</button></div>
     <div className="catalog"><nav className="categories" aria-label="Channel categories">{categories.length ? categories.map(c => <button key={c.id} className={category === c.id ? 'chosen' : ''} disabled={loading || !online} onClick={() => { setCategory(c.id); loadCatalog('channels', c.id); }}>{c.name}<Icon name="arrow" size={13}/></button>) : <p>Load categories to browse channels.</p>}</nav><div className="channel-list">{loading ? <div className="empty"><span className="loader"/><h3>Loading channels</h3><p>Reading the Roku provider catalog.</p></div> : page ? <><div className="list-caption"><span>{page.kind === 'search' ? 'SEARCH RESULTS' : 'CHANNELS'}</span><span>{page.total ?? page.channels?.length} {page.incomplete ? 'reported · partial catalog' : 'available'}</span></div>{page.channels?.length ? page.channels.map(ch => <button className="channel-row" key={ch.streamId} disabled={!online} onClick={() => tune(ch)}><span className="channel-avatar">{ch.name.slice(0, 2).toUpperCase()}</span><span><strong>{ch.name}</strong><small>{ch.group} · {ch.streamId}</small></span><span className="watch">{snapshot?.channel?.streamId === ch.streamId ? 'Playing' : 'Play'} <Icon name="arrow" size={14}/></span></button>) : <div className="empty"><h3>No channels found</h3><p>Try another category or search.</p></div>}<div className="pagination"><button disabled={!online || !page.offset} onClick={() => loadCatalog(page.kind, page.categoryId, Math.max(0, page.offset - 100))}>← Previous</button><button disabled={!online || page.offset + (page.channels?.length || 0) >= page.total} onClick={() => loadCatalog(page.kind, page.categoryId, page.offset + 100)}>Next →</button></div></> : <div className="empty"><Icon name="tv" size={34}/><h3>{online ? 'No channels loaded' : 'Device offline'}</h3><p>{online ? 'Load categories or search for a channel.' : 'Open the IPTV app on this Roku to browse channels.'}</p></div>}</div></div></section>}
-    {tab === 'settings' && <section className="panel settings"><div><h3>Provider credentials</h3><p>Saved on {device.label} after validation.</p></div><form onSubmit={saveProvider}><label>Provider type<select name="providerType"><option value="xtream">Xtream account</option><option value="m3u">M3U playlist</option></select></label><label>Server or playlist URL<input required type="url" name="server" autoComplete="off" placeholder="https://…"/></label><div className="form-row"><label>Username<input name="username" autoComplete="off"/></label><label>Password<input type="password" name="password" autoComplete="new-password"/></label></div><button className="primary" disabled={!online}>Validate and save on Roku <Icon name="arrow" size={16}/></button></form></section>}
+    {tab === 'settings' && <section className="panel settings"><div><h3>Provider credentials</h3><p>Saved on {device.label} after validation.</p></div><form onSubmit={saveProvider}><label>Provider type<select name="providerType" value={providerType} onChange={e => setProviderType(e.target.value)}><option value="xtream">Xtream account</option><option value="m3u">M3U playlist</option></select></label><label>{providerType === 'm3u' ? 'Complete M3U playlist URL' : 'Server address'}<input required type="url" name="server" autoComplete="off" placeholder="https://…"/></label>{providerType === 'm3u' ? <p className="provider-hint">Use the complete playlist link supplied by your provider, including any credentials in the URL.</p> : <div className="form-row"><label>Username<input required name="username" autoComplete="off"/></label><label>Password<input required type="password" name="password" autoComplete="new-password"/></label></div>}<button className="primary" disabled={!online}>Validate and save on Roku <Icon name="arrow" size={16}/></button></form></section>}
     {tab === 'health' && <section className="panel health">{[['Startup time',`${number(metrics.startupMs)} ms`],['Buffering events',number(metrics.bufferingCount)],['Buffering time',`${number(metrics.bufferingMs,1000)} s`],['Installed app',snapshot?.appVersion || '—'],['Roku OS',snapshot?.osVersion || '—'],['Playback',stateName(snapshot?.state)]].map(([k,v]) => <div key={k}><span>{k}</span><strong>{v}</strong></div>)}</section>}
     <footer><span>Media counters exclude network overhead.</span></footer></main></div>;
 }
