@@ -49,7 +49,7 @@ export class ControlRoomStack extends Stack {
     const table = new Table(this, 'Mailbox', {
       tableName: 'iptv-control-room', partitionKey: { name: 'PK', type: AttributeType.STRING },
       sortKey: { name: 'SK', type: AttributeType.STRING },
-      billingMode: BillingMode.PROVISIONED, readCapacity: 5, writeCapacity: 5,
+      billingMode: BillingMode.PROVISIONED, readCapacity: 25, writeCapacity: 10,
       timeToLiveAttribute: 'expiresAt', encryption: TableEncryption.AWS_MANAGED,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
       removalPolicy: RemovalPolicy.DESTROY,

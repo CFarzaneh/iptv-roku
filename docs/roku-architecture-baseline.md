@@ -38,7 +38,7 @@ The manifest identifies build 1.0.20. The packaged configuration contains Xtream
 5. Selecting a channel passes the current channel list and selected index to `PlayerScreen`. It creates a ContentNode containing the provider URL, marks it live, defaults to HLS, sets a User-Agent header, and starts the Video node. Up/down switches within that supplied list; Back stops playback.
 6. An exact “Unsupported AAC stream” diagnostic can trigger the local repair task. Video then reads a loopback URL on port 8765. The relay downloads HLS data, rewrites manifest URLs, and changes specific ADTS profile bits in transport-stream segments. It does not decode and re-encode media. Affected channels are remembered for the current app session.
 7. Guide loading is separate from initial channel display. An explicit guide URL loads compact JSON; automatic Xtream mode fetches short listings for loaded channels. The app refreshes guides hourly and updates its current-time field every 30 seconds. The repository also includes an XMLTV-to-JSON generator and a GitHub Actions schedule every two hours; live workflow operation was not verified.
-8. Favorites and up to 20 recents are stored by channel name in the registry. Guide lookup also uses channel names. M3U search matches name and `tvgName`; provider search matches name and provider EPG ID.
+8. Favorites and up to 20 recents are stored by channel name in the registry. Guide lookup also uses channel names. The Roku's own search UI matches names and guide data. Dashboard search runs on the Roku and additionally matches exact stream IDs, including Xtream `stream_id` and the catalog-scoped M3U ID.
 
 ## Findings that affect the next design
 

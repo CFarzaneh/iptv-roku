@@ -51,6 +51,7 @@ sub loadChannelSearch(api as string, streamBase as string, query as string)
     idPattern = CreateObject("roRegex", "^[0-9]+$", "")
     qLower = LCase(query)
     channels = []
+    exactChannel = invalid
     totalMatches = 0
     for each row in response.data
         if GetInterface(row, "ifAssociativeArray") <> invalid
@@ -58,26 +59,38 @@ sub loadChannelSearch(api as string, streamBase as string, query as string)
             name = liveString(row.name)
             epgName = liveString(row.epg_channel_id)
             if name <> "" and idPattern.IsMatch(streamId)
-                if Instr(1, LCase(name), qLower) > 0 or (epgName <> "" and Instr(1, LCase(epgName), qLower) > 0)
+                idMatch = (streamId = query)
+                if idMatch or Instr(1, LCase(name), qLower) > 0 or (epgName <> "" and Instr(1, LCase(epgName), qLower) > 0)
                     totalMatches = totalMatches + 1
-                    if channels.Count() < 500
-                        channels.Push({
-                            name: name,
-                            url: streamBase + streamId + ".m3u8",
-                            providerStreamId: streamId,
-                            group: "Search results",
-                            logo: liveString(row.stream_icon),
-                            tvgId: epgName,
-                            tvgName: name,
-                            streamType: "hls",
-                            compatible: true,
-                            catchup: false
-                        })
+                    channel = {
+                        name: name,
+                        url: streamBase + streamId + ".m3u8",
+                        providerStreamId: streamId,
+                        group: "Search results",
+                        logo: liveString(row.stream_icon),
+                        tvgId: epgName,
+                        tvgName: name,
+                        streamType: "hls",
+                        compatible: true,
+                        catchup: false
+                    }
+                    if idMatch
+                        exactChannel = channel
+                    else if channels.Count() < 500
+                        channels.Push(channel)
                     end if
                 end if
             end if
         end if
     end for
+    if exactChannel <> invalid
+        ordered = [exactChannel]
+        for each channel in channels
+            if ordered.Count() >= 500 then exit for
+            ordered.Push(channel)
+        end for
+        channels = ordered
+    end if
 
     result = {
         version: 1,

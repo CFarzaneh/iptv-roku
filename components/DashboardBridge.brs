@@ -174,14 +174,27 @@ sub dashboardSendCatalog(command as object, res as object)
         end for
     else
         matches = []
+        exactChannel = invalid
         for each channel in res.channels
             include = true
+            idMatch = false
             if res.providerMode <> true
                 if command.kind = "channels" and command.categoryId <> "All" then include = (channel.group = command.categoryId)
-                if command.kind = "search" then include = (LCase(channel.name).Instr(LCase(command.query)) >= 0)
+                if command.kind = "search"
+                    idMatch = (dashboardChannelId(channel) = command.query)
+                    include = (LCase(channel.name).Instr(LCase(command.query)) >= 0 or idMatch)
+                    if idMatch then exactChannel = channel
+                end if
             end if
-            if include then matches.Push(channel)
+            if include and not idMatch then matches.Push(channel)
         end for
+        if exactChannel <> invalid
+            ordered = [exactChannel]
+            for each channel in matches
+                ordered.Push(channel)
+            end for
+            matches = ordered
+        end if
         data.channels = []
         m.dashboardPlayContext = matches
         data.offset = command.offset

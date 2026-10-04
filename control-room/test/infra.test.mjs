@@ -24,7 +24,7 @@ test('CDK retains private login and hosting, adds one small TTL mailbox, and rem
   });
   template.hasResourceProperties('AWS::DynamoDB::Table', {
     TableName: 'iptv-control-room', TimeToLiveSpecification: { AttributeName: 'expiresAt', Enabled: true },
-    ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
+    ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
   });
   template.resourceCountIs('AWS::Amplify::App', 1);
   template.resourceCountIs('AWS::Lightsail::Container', 0);

@@ -77,7 +77,7 @@ pnpm provision my-roku 'My Roku' https://YOUR_FUNCTION_URL VERIFIED_DEVELOPER_ID
 pnpm provision dads-roku 'Dad’s Roku' https://YOUR_FUNCTION_URL VERIFIED_DEVELOPER_ID
 ```
 
-The resulting `dashboard.json` and `authorization.json` are ignored and must not be shared between TVs. Update `.private/server.json` with both authorization entries, then redeploy the stack. A new app process authenticates using its installation secret plus a fresh Roku-signed attestation. The app has no dashboard-pairing form. Dad's authorization entry was deployed on October 4, 2026; the device has not yet established a session, so the sideload and hardware behavior still need validation.
+The resulting `dashboard.json` and `authorization.json` are ignored and must not be shared between TVs. Update `.private/server.json` with both authorization entries, then redeploy the stack. A new app process authenticates using its installation secret plus a fresh Roku-signed attestation. The app has no dashboard-pairing form. Both Rokus authenticated and reported playback on October 4, 2026.
 
 Build the dashboard, publish it to Amplify, and build separate private Roku ZIPs. Creating a ZIP does not install it:
 
@@ -86,10 +86,10 @@ pnpm build
 AWS_PROFILE=cam node scripts/publish-dashboard.mjs
 python3 ../tools/package_personalized.py my-roku \
   --dashboard .private/my-roku/dashboard.json --provider-config ../config.json \
-  --output ../builds/my-roku-v1.0.24.zip
+  --output ../builds/my-roku-v1.0.25.zip
 python3 ../tools/package_personalized.py dads-roku \
   --dashboard .private/dads-roku/dashboard.json --empty-provider \
-  --output ../builds/dads-roku-v1.0.24.zip
+  --output ../builds/dads-roku-v1.0.25.zip
 ```
 
 The current TV's favorites/recents recovery seed can be captured before replacing its sideload. From a computer on the same LAN, run `python3 ../tools/backup_roku_store.py ROKU_LAN_IP`; it uses Roku's read-only developer-mode `query/registry/dev` endpoint and saves only validated lists and the developer ID under ignored `backups/`. Roku may require **Settings → System → Advanced system settings → Control by mobile apps → Enabled** for this endpoint. If Dad is replacing an existing sideload, capture his Roku's store separately from his home network. The owner elected to build My Roku's October 3 package without a restore seed; a sideload failure or registry reset could erase favorites and recents. The earlier v1.0.20 ZIP remains untouched. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
@@ -99,6 +99,8 @@ The current TV's favorites/recents recovery seed can be captured before replacin
 - Roku sends one short asynchronous `POST /device/sync` about every two seconds while the IPTV app is active. It carries a snapshot and queued acknowledgments and receives at most one command.
 - Browser polls current status/results while visible and slows down when hidden. Commands expire quickly and check source/catalog/playback revisions. The Roku deduplicates command IDs.
 - Xtream `stream_id` is retained. M3U `tvg-id` is used only when unique; otherwise the Roku provides a catalog-scoped local ID. The browser never receives credential-bearing stream URLs.
+- Dashboard channel search matches names and exact stream IDs on the Roku. Xtream search also matches provider EPG IDs; the website never queries the IPTV provider directly.
+- The DynamoDB table remains provisioned at 25 RCU / 10 WCU after its original 5/5 setting caused read throttling with two active Rokus and the dashboard.
 - Provider replacement is sent as a short-lived DynamoDB command, validated and stored by the Roku, and applies on the next app launch in this version. Lambda and DynamoDB temporarily see the candidate credentials; logs do not.
 - A new private sideload built with `--empty-provider` contains no provider credentials. It displays a waiting screen rather than forcing Roku keyboard setup; when the dashboard sends the first valid provider settings, the Roku saves them and loads the catalog automatically. The package still contains that device's dashboard installation secret.
 - The waiting screen displays a brief dashboard connection diagnostic if first-time device authentication fails. It contains only a status code or generic error, never credentials or attestation tokens.

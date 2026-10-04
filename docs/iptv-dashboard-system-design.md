@@ -1,6 +1,6 @@
 # IPTV control room — system design
 
-Updated October 4, 2026. This supersedes the Lightsail relay design. The CDK stack deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. The API and temporary mailbox passed live cloud checks, and the owner has used the dashboard with My Roku. Dad's authorization is deployed, but his Roku has not yet established a session or been validated on hardware.
+Updated October 4, 2026. This supersedes the Lightsail relay design. The CDK stack deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. Both personalized Rokus have authenticated, reported playback, and accepted dashboard commands on hardware.
 
 ## Accepted scope
 
@@ -27,7 +27,7 @@ The dashboard cannot open an inbound connection to a Roku behind a home router. 
 
 The CloudFormation stack is defined by AWS CDK in `control-room/infra`. It contains Amplify Hosting, a Cognito user pool/client/domain, one DynamoDB Standard table with PK/SK and TTL, one Node.js Lambda, a Function URL, a limited Lambda execution role, and a one-week CloudWatch log group. CDK bootstrap creates its asset-publishing resources through CloudFormation. No Lightsail container/VM, EC2, API Gateway, separately managed CloudFront, Route 53, ACM, RDS, ElastiCache, or Secrets Manager is part of this version. S3 release resources are deferred until software-update support.
 
-The table starts with 5 provisioned RCU and 5 provisioned WCU, subject to real traffic measurements. It holds only the latest device snapshot, short-lived auth/session data, pending commands, and short-lived results. This is a database, but not a viewing-history or full-catalog database. There is no permanently stored IPTV provider password in AWS. A credential replacement does temporarily pass through Lambda and a DynamoDB command; that plaintext is removed after acknowledgment or expiry. DynamoDB TTL deletion can take days, so code must enforce deadlines and explicitly delete expired sensitive commands rather than trusting TTL alone. [DynamoDB TTL behavior](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html).
+The table uses 25 provisioned RCU and 10 provisioned WCU. Its original 5/5 setting throttled reads with both Rokus and the dashboard active; CloudFormation raised capacity on October 4 without changing billing mode. It holds only the latest device snapshot, short-lived auth/session data, pending commands, and short-lived results. This is a database, but not a viewing-history or full-catalog database. There is no permanently stored IPTV provider password in AWS. A credential replacement does temporarily pass through Lambda and a DynamoDB command; that plaintext is removed after acknowledgment or expiry. DynamoDB TTL deletion can take days, so code must enforce deadlines and explicitly delete expired sensitive commands rather than trusting TTL alone. [DynamoDB TTL behavior](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html).
 
 ## Roku integration and sync
 
@@ -47,7 +47,7 @@ Commands include an ID, server-set deadline, app-session ID, source/catalog revi
 
 ## Channels, metrics, and provider settings
 
-The website does not contact the IPTV provider. It asks the online Roku for categories or bounded channel pages through a temporary catalog command. Xtream `stream_id` is the playback identity; M3U uses a unique `tvg-id` when safe, otherwise an opaque Roku mapping scoped to the catalog revision. Names, channel numbers, and EPG IDs are display/guide data, not tune IDs. Responses omit stream URLs, authorization headers, and credentials. Large results are paged and capped below DynamoDB’s item limit. Catalog data is not permanently imported into AWS.
+The website does not contact the IPTV provider. It asks the online Roku for categories or bounded channel pages through a temporary catalog command. Dashboard search matches channel names and exact stream IDs; Xtream search also matches provider EPG IDs. Xtream `stream_id` is the playback identity; M3U uses a unique `tvg-id` when safe, otherwise an opaque Roku mapping scoped to the catalog revision. Names, channel numbers, and EPG IDs are display/guide data, not tune IDs. Responses omit stream URLs, authorization headers, and credentials. Large results are paged and capped below DynamoDB’s item limit. Catalog data is not permanently imported into AWS.
 
 The Roku reports current channel, player state, app/OS version, and available Video-node metrics. The dashboard displays decimal KB/MB and a labeled recent KB/s window. Missing diagnostics show unavailable rather than zero. Media counters are not complete home-network usage. No daily/monthly viewing history is stored.
 
@@ -75,7 +75,7 @@ TLS covers browser/Roku traffic to AWS. Lambda sees decrypted control payloads; 
 
 Two Rokus active all day at a 2-second interval make 2,592,000 sync invocations in a 30-day month. At the published 1-million-request Lambda free allowance and $0.20 per million additional requests, request charges would be about **$0.32/month**, assuming the account has not used that allowance elsewhere. A 128 MB function averaging 100 ms would use 32,400 GB-seconds, below the published 400,000 GB-second monthly allowance. Actual duration, browser polls, other Lambda usage, logs, data transfer, and AWS account eligibility can change the bill. A visible browser polling every 2.5 seconds adds requests; the attachment’s $0.32 figure excludes that browser traffic. [Lambda pricing](https://aws.amazon.com/lambda/pricing/).
 
-DynamoDB Standard provisioned 5/5 is within the published 25 RCU/25 WCU and 25 GB monthly free allowance, if available to this payer account and not consumed elsewhere. This is not a $0 guarantee; monitor throttling and billing before changing capacity. Amplify, Cognito, bootstrap S3, future release S3, and CloudWatch may add small usage-based charges. No video transits AWS, so media bandwidth should not affect these backend estimates. [DynamoDB pricing](https://aws.amazon.com/dynamodb/pricing/), [Amplify pricing](https://aws.amazon.com/amplify/pricing/), [Cognito pricing](https://aws.amazon.com/cognito/pricing/).
+DynamoDB Standard provisioned 25/10 is within the published 25 RCU/25 WCU and 25 GB monthly free allowance. This account had no other DynamoDB tables in `us-east-2` when capacity was raised. This is not a $0 guarantee; monitor throttling and billing as the workload changes. Amplify, Cognito, bootstrap S3, future release S3, and CloudWatch may add small usage-based charges. No video transits AWS, so media bandwidth should not affect these backend estimates. [DynamoDB pricing](https://aws.amazon.com/dynamodb/pricing/), [Amplify pricing](https://aws.amazon.com/amplify/pricing/), [Cognito pricing](https://aws.amazon.com/cognito/pricing/).
 
 ## Deployment and validation
 
