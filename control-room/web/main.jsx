@@ -107,9 +107,16 @@ function App() {
   return <div className="shell"><AppHeader link={link}/>
     <main className="workspace"><div className="page-heading"><div><span className="eyebrow">OVERVIEW</span><h1>Devices</h1><p>Roku status and playback control</p></div><span className="device-count">{devices.length} {devices.length === 1 ? 'device' : 'devices'}</span></div>
     {error && <div className="alert" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>×</button></div>}
-    <section className="device-grid" aria-label="Roku devices">{devices.map((d, index) => <button key={d.id} onClick={() => chooseDevice(d.id)} className={`device-card ${selected === d.id ? 'selected' : ''}`} aria-pressed={selected === d.id}><div className="device-top"><span className="device-icon"><Icon name="tv" size={22}/></span><span className={`pill ${d.online && link === 'Connected' ? 'is-online' : 'is-offline'}`}><span className={`status-dot ${d.online && link === 'Connected' ? 'live' : ''}`}/>{d.online && link === 'Connected' ? 'Online' : 'Offline'}</span></div><span className="device-number">ROKU {String(index + 1).padStart(2, '0')}</span><h2>{d.label}</h2><div className="device-bottom"><span>{d.snapshot?.channel?.name || 'No active stream'}</span><Icon name="arrow" size={17}/></div></button>)}</section>
-    <div className="section-title"><h2>{device.label}</h2><span>{device.lastSeen ? `Last report ${new Date(device.lastSeen).toLocaleTimeString()}` : 'No reports yet'}</span></div>
-    <section className="now-playing"><div><span className="eyebrow">{online ? stateName(snapshot?.state).toUpperCase() : 'OFFLINE · LAST REPORT'}</span><h2>{snapshot?.channel?.name || 'No active stream'}</h2><p>{snapshot?.channel ? `${snapshot.channel.group} · Stream ID ${snapshot.channel.streamId}` : online ? 'Select a channel below to begin playback.' : 'Open the IPTV app on this Roku to reconnect.'}</p></div><div className={`waveform ${snapshot?.state === 'playing' && online ? 'playing' : ''}`} aria-hidden="true">{Array.from({ length: 32 }, (_, i) => <i key={i} style={{ height: `${12 + (Math.sin(i * 1.7) + 1) * 28}px`, animationDelay: `${i * 70}ms` }}/>)}</div><span className="direct-label">DIRECT STREAM</span></section>
+    <section className="device-grid" aria-label="Roku devices">{devices.map((d, index) => {
+      const connected = d.online && link === 'Connected';
+      const channel = d.snapshot?.channel;
+      return <button key={d.id} onClick={() => chooseDevice(d.id)} className={`device-card ${selected === d.id ? 'selected' : ''}`} aria-pressed={selected === d.id}>
+        <div className="device-top"><span className="device-icon"><Icon name="tv" size={22}/></span><span className={`pill ${connected ? 'is-online' : 'is-offline'}`}><span className={`status-dot ${connected ? 'live' : ''}`}/>{connected ? 'Online' : 'Offline'}</span></div>
+        <span className="device-number">ROKU {String(index + 1).padStart(2, '0')}</span><h2>{d.label}</h2>
+        <div className="device-stream"><span className="eyebrow">{connected ? stateName(d.snapshot?.state).toUpperCase() : 'OFFLINE · LAST REPORT'}</span><strong>{channel?.name || 'No active stream'}</strong><span className="stream-detail">{channel ? `${channel.group} · Stream ID ${channel.streamId}` : connected ? 'Select a channel below to begin playback.' : 'Open the IPTV app on this Roku to reconnect.'}</span></div>
+        <div className="device-report"><span>{d.lastSeen ? `Last report ${new Date(d.lastSeen).toLocaleTimeString()}` : 'No reports yet'}</span><Icon name="arrow" size={17}/></div>
+      </button>;
+    })}</section>
     <section className="metrics" aria-label="Playback metrics">{[
       ['Media downloaded', number(metrics.sessionBytes, 1e6), 'MB this app session'],
       ['Recent download rate', number(metrics.bytesPerSecond, 1000), 'KB/s · 5 second window'],
