@@ -2,13 +2,13 @@
 export const loginBranding = {
   categories: { global: { colorSchemeMode: 'DARK' } },
   components: {
-    pageBackground: { image: { enabled: false }, darkMode: { color: '071120ff' } },
-    form: { darkMode: { backgroundColor: '0d1b30ff', borderColor: '25405fff' } },
-    pageText: { darkMode: { headingColor: 'e8f0ffff', bodyColor: '91a7c2ff', descriptionColor: '91a7c2ff' } },
+    pageBackground: { image: { enabled: false }, darkMode: { color: '030b1dff' } },
+    form: { darkMode: { backgroundColor: '0b2d58ff', borderColor: '2270adff' } },
+    pageText: { darkMode: { headingColor: 'f3f8ffff', bodyColor: 'a7c1e0ff', descriptionColor: 'a7c1e0ff' } },
     primaryButton: { darkMode: {
-      defaults: { backgroundColor: 'ff9a42ff', textColor: '1d180fff' },
-      hover: { backgroundColor: 'ffb56cff', textColor: '1d180fff' },
-      active: { backgroundColor: 'f58b32ff', textColor: '1d180fff' },
+      defaults: { backgroundColor: 'ffa21fff', textColor: '211402ff' },
+      hover: { backgroundColor: 'ffc044ff', textColor: '211402ff' },
+      active: { backgroundColor: 'ff8a0dff', textColor: '211402ff' },
     } },
   },
 };
