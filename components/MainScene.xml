@@ -88,7 +88,7 @@
                        color="0xECF2EEFF"
                        width="1920"
                        horizAlign="center" />
-                <Label text="Enter your playlist URL to get started."
+                <Label id="onboardingMessage" text="Enter your playlist URL to get started."
                        translation="[240, 440]"
                        color="0x8A968EFF"
                        width="1440"

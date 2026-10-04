@@ -114,7 +114,8 @@ sub onConfigLoaded()
     if url <> ""
         startPlaylistLoad(url, false)
     else
-        showOnboarding()
+        remoteProvisioning = CreateObject("roFileSystem").Exists("pkg:/source/dashboard.json")
+        showOnboarding(remoteProvisioning)
     end if
 end sub
 
@@ -197,11 +198,18 @@ sub showError(errText as string)
     m.errorHintLabel.visible = true
 end sub
 
-sub showOnboarding()
+sub showOnboarding(remoteProvisioning = false as boolean)
     hideAllScreens()
     m.onboardingGroup.visible = true
+    if remoteProvisioning
+        m.top.findNode("onboardingMessage").text = "Waiting for provider settings from the dashboard."
+        m.onboardingOk.text = "Enter playlist URL manually"
+    else
+        m.top.findNode("onboardingMessage").text = "Enter your playlist URL to get started."
+        m.onboardingOk.text = "Enter playlist URL"
+    end if
     m.onboardingOk.setFocus(true)
-    openOnboardingKeyboard()
+    if not remoteProvisioning then openOnboardingKeyboard()
 end sub
 
 sub openOnboardingKeyboard()

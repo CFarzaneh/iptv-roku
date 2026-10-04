@@ -277,4 +277,6 @@ sub onDashboardProviderValidated()
     end if
     ' Keep the current playback/catalog coherent. Apply the saved account at next app launch.
     dashboardReply(command, "saved")
+    ' A fresh, unconfigured sideload can load its first account without a Roku-side step.
+    if m.currentUrl = invalid or m.currentUrl = "" then runConfigTask()
 end sub
