@@ -12,14 +12,13 @@ const Icon = ({ name, size = 20 }) => <svg width={size} height={size} viewBox="0
   settings: <><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="16" cy="17" r="3" fill="currentColor"/></>,
   refresh: <><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 14 6M4 12a8 8 0 0 0 14 6"/></>,
 })[name]}</svg>;
-const initialDevices = [{ id: 'my-roku', label: 'My Roku' }, { id: 'dads-roku', label: "Dad’s Roku" }];
 const number = (value, divisor = 1) => value == null ? '—' : (value / divisor).toLocaleString(undefined, { maximumFractionDigits: 1 });
 const stateName = value => ({ idle: 'Ready', tuning: 'Tuning', playing: 'Playing', buffering: 'Buffering', paused: 'Paused', error: 'Playback error', stopped: 'Stopped' })[value] || 'Not reporting';
 
 function App() {
   const [ready, setReady] = useState(false), [configured, setConfigured] = useState(false);
   const [signedIn, setSignedIn] = useState(false), [error, setError] = useState('');
-  const [devices, setDevices] = useState(initialDevices), [selected, setSelected] = useState('my-roku');
+  const [devices, setDevices] = useState([]), [selected, setSelected] = useState('my-roku');
   const [tab, setTab] = useState('channels'), [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(''), [query, setQuery] = useState('');
   const [page, setPage] = useState(null), [loading, setLoading] = useState(false), [notice, setNotice] = useState('');
@@ -31,6 +30,9 @@ function App() {
   const online = Boolean(device?.online && link === 'Connected');
 
   useEffect(() => { auth.initialize().then(c => { setConfigured(c); setSignedIn(auth.authenticated()); }).catch(e => setError(e.message)).finally(() => setReady(true)); }, []);
+  useEffect(() => {
+    if (devices.length && !devices.some(d => d.id === selected)) setSelected(devices[0].id);
+  }, [devices, selected]);
   useEffect(() => {
     if (!signedIn) return;
     const controller = new AbortController();
@@ -95,13 +97,12 @@ function App() {
     event.preventDefault(); const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form));
     setNotice('Validating provider settings on the Roku…'); setError('');
-    const result = request('provider-config', values);
-    form.reset();
-    try { await result; setNotice('Provider settings saved. They will apply the next time the IPTV app opens.'); }
+    try { await request('provider-config', values); form.reset(); setNotice('Provider settings saved. They will apply the next time the IPTV app opens.'); }
     catch (e) { setNotice(''); setError(e.message); }
   }
   if (!ready) return <div className="entry"><Brand/><p>Opening your control room…</p></div>;
   if (!signedIn) return <div className="login"><div className="login-art"><Brand/><div className="login-title"><span className="eyebrow">TWO HOMES. ONE PLACE.</span><h1>A little closer<br/>to what’s on.</h1><p>Your channels, your people.<br/>A quieter way to keep everything connected.</p></div><div className="rings"/><span className="login-foot">SIGNAL / PRIVATE IPTV CONTROL ROOM</span></div><main className="login-form"><span className="eyebrow">WELCOME HOME</span><h2>Your control room.</h2><p>Sign in to see your TVs and choose what plays next.</p>{error && <div role="alert" className="alert">{error}</div>}{configured ? <button className="primary" onClick={() => auth.login().catch(e => setError(e.message))}>Sign in securely <Icon name="arrow"/></button> : <div className="setup">Deployment configuration is not connected yet. Add the API and Cognito settings to open your control room.</div>}<small>One private account · Both TVs</small></main></div>;
+  if (!devices.length) return <div className="shell"><aside className="sidebar"><Brand/><span className="nav-label">YOUR SPACE</span><div className="sidebar-bottom"><span className={`status-dot ${link === 'Connected' ? 'live' : ''}`}/>{link}<button className="text-button" onClick={auth.logout}>Sign out ↗</button></div></aside><main className="workspace"><header><div><span className="eyebrow">YOUR PRIVATE CONTROL ROOM</span><h1>Everything in view<span>.</span></h1><p>Two homes, connected when their Roku apps are open.</p></div><div className="region">OHIO <span>us-east-2</span></div></header>{error && <div className="alert" role="alert">{error}</div>}<section className="panel empty"><Icon name="tv" size={40}/><h2>{link === 'Connected' ? 'No Rokus enrolled yet.' : 'Connecting to your control room…'}</h2><p>{link === 'Connected' ? 'Your TVs will appear here after their personalized IPTV apps are installed and connected.' : 'Checking for your TVs.'}</p></section></main></div>;
 
   return <div className="shell"><aside className="sidebar"><Brand/><span className="nav-label">YOUR SPACE</span><button className="nav-item active" onClick={() => setTab('channels')}><Icon name="grid"/>Control room</button><div className="sidebar-bottom"><span className={`status-dot ${link === 'Connected' ? 'live' : ''}`}/>{link}<button className="text-button" onClick={auth.logout}>Sign out ↗</button></div></aside>
     <main className="workspace"><header><div><span className="eyebrow">YOUR PRIVATE CONTROL ROOM</span><h1>Everything in view<span>.</span></h1><p>Two homes, connected. Choose a TV to take a closer look.</p></div><div className="region">OHIO <span>us-east-2</span></div></header>

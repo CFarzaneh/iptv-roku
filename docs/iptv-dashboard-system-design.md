@@ -1,6 +1,6 @@
 # IPTV control room — system design
 
-Updated October 3, 2026. This supersedes the Lightsail relay design. The CDK stack now deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. The API and temporary mailbox have passed live cloud checks; neither Roku has been enrolled or hardware-tested yet.
+Updated October 3, 2026. This supersedes the Lightsail relay design. The CDK stack now deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. The API and temporary mailbox have passed live cloud checks. My Roku's installation identity is provisioned and its private ZIP is built, but it has not been sideloaded or hardware-tested; Dad's Roku is not yet provisioned.
 
 ## Accepted scope
 
@@ -79,7 +79,7 @@ DynamoDB Standard provisioned 5/5 is within the published 25 RCU/25 WCU and 25 G
 
 All infrastructure changes go through CDK synthesis and CloudFormation deployment in `us-east-2` using AWS profile `cam`; generated templates and private config stay out of Git. The fork contains the Roku app, dashboard, backend, CDK, and these design documents. The CloudFormation `ApiUrl` output feeds the dashboard runtime configuration and each personalized Roku package. CDK bootstrap publishes the bundled Lambda asset. No Lightsail image workflow remains. The deployed API has returned a successful health response and rejected an unauthenticated device-list request; a temporary DynamoDB record passed delivery, retry, acknowledgment, completion, and cleanup checks.
 
-Before either sideload, preserve the current ZIP and obtain a trustworthy favorites/recents backup from that specific Roku. The existing v1.0.20 ZIP is an app-package backup, not a backup of registry favorites. Roku's read-only developer-mode `query/registry/dev` endpoint can export the current lists and developer ID from the local network; Roku may require “Control by mobile apps” enabled. The first query on My Roku returned 403, so no current store backup has been captured yet. Do not replace the app until that backup is verified. Validate Roku attestation on hardware, two-device isolation, concurrent sync/report/result handling, stale channel changes, provider validation failure, no credential leakage, telemetry accuracy, and local playback during AWS failure. A successful BrightScript compile or CloudFormation deploy does not establish those hardware behaviors.
+Preserve the current ZIP before either sideload. The existing v1.0.20 ZIP is an app-package backup, not a backup of registry favorites. Roku's read-only developer-mode `query/registry/dev` endpoint can export the current lists and developer ID from the local network; Roku may require “Control by mobile apps” enabled. My Roku returned 403, and the owner elected to proceed without a current favorites/recents backup. Its personalized ZIP has no restore seed, so a failed sideload or registry reset could erase that local data. The installed app has not yet been replaced. Validate Roku attestation on hardware, two-device isolation, concurrent sync/report/result handling, stale channel changes, provider validation failure, no credential leakage, telemetry accuracy, and local playback during AWS failure. A successful BrightScript compile or CloudFormation deploy does not establish those hardware behaviors.
 
 ## Software updates — last phase
 
