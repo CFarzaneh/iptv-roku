@@ -6,7 +6,7 @@ const profile = process.env.AWS_PROFILE || 'cam';
 const aws = (...args) => JSON.parse(execFileSync('aws', [...args, '--profile', profile, '--region', 'us-east-2', '--output', 'json'], { encoding: 'utf8' }));
 const stack = aws('cloudformation', 'describe-stacks', '--stack-name', 'IptvControlRoom').Stacks[0];
 const outputs = Object.fromEntries(stack.Outputs.map(o => [o.OutputKey, o.OutputValue]));
-await writeFile('dist/runtime-config.json', JSON.stringify({ apiUrl: outputs.RelayUrl, cognitoDomain: outputs.LoginUrl, clientId: outputs.ClientId }));
+await writeFile('dist/runtime-config.json', JSON.stringify({ apiUrl: outputs.RelayUrl || '', cognitoDomain: outputs.LoginUrl, clientId: outputs.ClientId }));
 await mkdir('.private', { recursive: true, mode: 0o700 });
 const artifact = resolve('.private/dashboard.zip');
 execFileSync('zip', ['-qr', artifact, '.'], { cwd: resolve('dist') });

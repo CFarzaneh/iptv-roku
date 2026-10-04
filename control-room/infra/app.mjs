@@ -8,4 +8,6 @@ new ControlRoomStack(app, 'IptvControlRoom', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region },
   image: app.node.tryGetContext('relayImage'),
   configurationPath: app.node.tryGetContext('relayConfig'),
+  enableRelay: app.node.tryGetContext('enableRelay') === 'true',
+  githubSubject: app.node.tryGetContext('githubSubject'),
 });

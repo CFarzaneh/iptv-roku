@@ -42,36 +42,50 @@ The console-login flow requires AWS CLI >=2.32.0 and `SignInLocalDevelopmentAcce
 
 ## Deployment
 
-First inspect and deploy the CDK infrastructure. The initial Lightsail service has no application deployment; it is billable once created. No backend authentication is exposed until a validated private configuration and image are provided.
+First inspect and deploy the CDK infrastructure. This creates Cognito and Amplify. Lightsail is created in a separate deployment, so the initial website deployment does not start a billable idle service.
 
 ```sh
-AWS_PROFILE=cam pnpm cdk diff
-AWS_PROFILE=cam pnpm cdk deploy --outputs-file .private/outputs.json
+AWS_PROFILE=cam pnpm aws:diff
+AWS_PROFILE=cam pnpm aws:deploy --outputs-file .private/outputs.json
+pnpm build
+AWS_PROFILE=cam node scripts/publish-dashboard.mjs
 ```
 
 This stack uses no CDK assets; CDK bootstrap is not required for its current resources. S3 releases, application updates, and extra database services are deferred. Keep one Node process and one Lightsail node: mailboxes and sessions are intentionally RAM-only.
 
-Create the one administrator in Cognito with an explicit local administrative operation (suppress automatic invitation email unless you want it sent). Record the resulting Cognito `sub` in the private relay configuration. Complete its initial password setup through the hosted login. No public signups are permitted.
+Create the one administrator in Cognito without sending an invitation email. The script saves a temporary first-login password and the resulting Cognito `sub` only under ignored `.private/`. Complete the initial password change through the hosted login. No public signups are permitted.
+
+```sh
+AWS_PROFILE=cam pnpm admin:create YOUR_ADMIN_EMAIL
+```
 
 Obtain the official Roku attestation certificate and verify a challenge from each actual sideloaded installation. Record its expected developerId and channelId. Do not assume channelId `dev` proves an exact binary or physical TV. Never load verification keys from JWT-supplied URLs. Configure overlapping trusted certificates during Roku signing-key rotation.
+
+When you are ready to activate the backend, create the one Lightsail service and its tightly scoped GitHub Actions image-builder role. The service becomes billable at this step. It has no public app until the image and private configuration are deployed:
+
+```sh
+AWS_PROFILE=cam pnpm aws:deploy -c enableRelay=true --outputs-file .private/outputs.json
+```
+
+The `RelayServiceUrl` stack output is the HTTPS endpoint to pass to `pnpm provision` for each Roku. `RelayUrl` appears only after an image and private configuration are deployed, so the published dashboard will not try to contact an unconfigured service.
 
 Generate each installation identity separately:
 
 ```sh
-pnpm provision my-roku 'My Roku' https://YOUR_LIGHTSAIL_ENDPOINT VERIFIED_DEVELOPER_ID
-pnpm provision dads-roku 'Dad’s Roku' https://YOUR_LIGHTSAIL_ENDPOINT VERIFIED_DEVELOPER_ID
+pnpm provision my-roku 'My Roku' https://YOUR_RELAY_SERVICE_URL VERIFIED_DEVELOPER_ID
+pnpm provision dads-roku 'Dad’s Roku' https://YOUR_RELAY_SERVICE_URL VERIFIED_DEVELOPER_ID
 ```
 
 Assemble `.private/server.json` matching `server/schema.mjs`: region, origins, Cognito userPoolId/clientId/adminSub, PEM attestationCertificates, and device authorization entries. Hashes are stored on the backend; plaintext installation secrets go only into their respective personalized Roku packages. Run the backend locally with `CONTROL_ROOM_CONFIG=.private/server.json pnpm start`.
 
-Build and push the relay image with Docker and the AWS Lightsail control plugin installed. Build from this directory so the strict Docker context excludes every provider/installation secret:
+Run the `Build relay image` workflow on the fork's `main` branch. GitHub Actions builds Docker without needing Docker installed on this Mac, assumes the AWS role through a repository-and-branch-bound OIDC trust policy, and pushes only the strict `control-room` Docker context to Lightsail. It reports the immutable image name, such as `:iptv-control-room.relay.1`. For a local build instead, with Docker and the AWS Lightsail control plugin installed:
 
 ```sh
 docker build --platform linux/amd64 -t iptv-control-room:local .
 aws lightsail push-container-image --profile cam --region us-east-2 \
   --service-name iptv-control-room --label relay --image iptv-control-room:local
 # Use the immutable image name returned above, such as :iptv-control-room.relay.1:
-AWS_PROFILE=cam pnpm cdk deploy -c relayImage=RETURNED_IMAGE_NAME \
+AWS_PROFILE=cam pnpm aws:deploy -c enableRelay=true -c relayImage=RETURNED_IMAGE_NAME \
   -c relayConfig=.private/server.json --outputs-file .private/outputs.json
 pnpm build
 AWS_PROFILE=cam node scripts/publish-dashboard.mjs

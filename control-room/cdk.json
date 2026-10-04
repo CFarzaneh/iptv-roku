@@ -1,5 +1,8 @@
 {
   "app": "node infra/app.mjs",
   "output": ".private/cdk.out",
-  "context": { "region": "us-east-2" }
+  "context": {
+    "region": "us-east-2",
+    "githubSubject": "repo:CFarzaneh@1896372/iptv-roku@1403768016:ref:refs/heads/main"
+  }
 }

@@ -10,6 +10,9 @@
     "test": "node --test test/*.test.mjs",
     "provision": "node scripts/provision.mjs",
     "cdk": "cdk",
+    "aws:diff": "node scripts/cdk-with-login.mjs diff",
+    "aws:deploy": "node scripts/cdk-with-login.mjs deploy",
+    "admin:create": "node scripts/create-admin.mjs",
     "synth": "cdk synth --quiet"
   },
   "dependencies": {
