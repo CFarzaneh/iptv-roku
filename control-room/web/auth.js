@@ -43,6 +43,12 @@ export async function login() {
     code_challenge_method: 'S256', code_challenge: challenge })}`);
 }
 export function authenticated() { return Boolean(accessToken); }
+export function passkeyEnrollmentUrl() {
+  if (!authenticated()) throw Error('Sign in before adding a passkey.');
+  const url = new URL('/passkeys/add', config.cognitoDomain);
+  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: callback() }).toString();
+  return url.toString();
+}
 export function logout() {
   accessToken = ''; refreshToken = '';
   location.assign(`${config.cognitoDomain}/logout?${new URLSearchParams({ client_id: config.clientId, logout_uri: callback() })}`);

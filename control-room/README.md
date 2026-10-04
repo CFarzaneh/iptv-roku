@@ -54,6 +54,14 @@ The sole Cognito administrator is created without a signup flow or invitation em
 AWS_PROFILE=cam pnpm admin:create YOUR_ADMIN_EMAIL
 ```
 
+### Passkey sign-in
+
+The CDK stack enables Cognito Essentials, managed login, and WebAuthn passkeys for the existing administrator. The API still accepts only the administrator's Cognito `sub`; passkey registration does not create another dashboard account. User verification is required on the passkey device.
+
+After deploying this stack and the dashboard, sign in once with the existing password. Select **Add passkey** in the dashboard header and finish registration on Cognito's managed login page. Then sign out and verify that passkey sign-in returns to the dashboard. Cognito's managed login asks for the account's username/email before offering its passkey, so the passkey removes routine password entry but not the username step.
+
+The password remains available during enrollment and recovery. Do not disable password authentication until a passkey has been registered and tested on the intended devices. The existing verified email remains the account-recovery method. Keep at least one additional recovery path before narrowing sign-in factors.
+
 Use the official Roku device-attestation certificate and verify each physical sideload's developer ID and channel ID. The provided app ZIP is not proof of a physical Roku identity. Build `.private/server.json` from the admin metadata, the trusted certificate, and zero or more verified device authorization files:
 
 ```sh

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { Stack, CfnOutput, Duration, RemovalPolicy, Tags } from 'aws-cdk-lib';
-import { UserPool, OAuthScope, AccountRecovery } from 'aws-cdk-lib/aws-cognito';
+import { UserPool, OAuthScope, AccountRecovery, FeaturePlan, ManagedLoginVersion, PasskeyUserVerification, CfnManagedLoginBranding } from 'aws-cdk-lib/aws-cognito';
 import { CfnApp, CfnBranch } from 'aws-cdk-lib/aws-amplify';
 import { AttributeType, BillingMode, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { Architecture, FunctionUrlAuthType, Runtime } from 'aws-cdk-lib/aws-lambda';
@@ -9,6 +9,7 @@ import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { fileURLToPath } from 'node:url';
 import { serverConfig } from '../server/schema.mjs';
 import { rokuAttestationCertificates } from '../server/roku-certificates.mjs';
+import { loginBranding } from './login-branding.mjs';
 
 export class ControlRoomStack extends Stack {
   constructor(scope, id, props = {}) {
@@ -26,15 +27,24 @@ export class ControlRoomStack extends Stack {
       signInAliases: { username: true, email: true },
       accountRecovery: AccountRecovery.EMAIL_ONLY,
       passwordPolicy: { minLength: 14, requireDigits: true, requireLowercase: true, requireUppercase: true, requireSymbols: true },
+      featurePlan: FeaturePlan.ESSENTIALS,
+      signInPolicy: { allowedFirstAuthFactors: { password: true, passkey: true } },
+      passkeyUserVerification: PasskeyUserVerification.REQUIRED,
       removalPolicy: RemovalPolicy.RETAIN,
     });
     const client = pool.addClient('DashboardClient', {
       generateSecret: false, preventUserExistenceErrors: true,
+      authFlows: { user: true, userSrp: true },
       oAuth: { flows: { authorizationCodeGrant: true }, scopes: [OAuthScope.OPENID, OAuthScope.EMAIL], callbackUrls: [website], logoutUrls: [website] },
       accessTokenValidity: Duration.minutes(15), idTokenValidity: Duration.minutes(15), refreshTokenValidity: Duration.hours(12),
       enableTokenRevocation: true,
     });
-    const domain = pool.addDomain('LoginDomain', { cognitoDomain: { domainPrefix: `iptv-control-${this.account}-${this.region}` } });
+    const domain = pool.addDomain('LoginDomain', { cognitoDomain: { domainPrefix: `iptv-control-${this.account}-${this.region}` },
+      managedLoginVersion: ManagedLoginVersion.NEWER_MANAGED_LOGIN });
+    const branding = new CfnManagedLoginBranding(this, 'LoginBranding', {
+      userPoolId: pool.userPoolId, clientId: client.userPoolClientId, settings: loginBranding,
+    });
+    branding.node.addDependency(domain);
     const table = new Table(this, 'Mailbox', {
       tableName: 'iptv-control-room', partitionKey: { name: 'PK', type: AttributeType.STRING },
       sortKey: { name: 'SK', type: AttributeType.STRING },
