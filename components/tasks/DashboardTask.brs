@@ -88,11 +88,20 @@ sub dashboardAuthenticate()
     end if
     store = CreateObject("roChannelStore")
     proof = store.GetDeviceAttestation(challenge.nonce)
-    if proof = invalid or proof = ""
+    if proof = invalid
         dashboardDisconnect()
         return
     end if
-    session = dashboardAuthPost("/device/auth/session", { challengeId: challenge.challengeId, attestation: proof, appSessionId: m.snapshot.appSessionId })
+    if GetInterface(proof, "ifAssociativeArray") = invalid
+        dashboardDisconnect()
+        return
+    end if
+    token = dashboardText(proof.token)
+    if proof.status <> 0 or token = ""
+        dashboardDisconnect()
+        return
+    end if
+    session = dashboardAuthPost("/device/auth/session", { challengeId: challenge.challengeId, attestation: token, appSessionId: m.snapshot.appSessionId })
     if session = invalid or session.sessionToken = invalid
         dashboardDisconnect()
         return
