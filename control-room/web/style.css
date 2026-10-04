@@ -71,7 +71,8 @@ svg { flex-shrink: 0; }
 .page-heading p { margin-top: 7px; color: var(--muted); font-size: 13px; }
 
 .device-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.device-card { position: relative; display: flex; flex-direction: column; min-width: 0; text-align: left; padding: 20px 23px 16px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(135deg, #0d3869 0%, #092445 48%, #06162f 100%); transition: border-color .18s, background .18s, transform .18s; }
+.device-card { position: relative; display: flex; flex-direction: column; min-width: 0; text-align: left; padding: 20px 23px 16px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(135deg, #0d3869 0%, #092445 48%, #06162f 100%); cursor: pointer; user-select: text; transition: border-color .18s, background .18s, transform .18s; }
+.device-card:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; }
 .device-card:hover { border-color: #2797ea; transform: translateY(-1px); }
 .device-card.selected { border-color: var(--orange); box-shadow: inset 3px 0 var(--orange), 0 0 0 1px #ffae3440, 0 12px 42px #00478935; }
 .device-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 17px; }
@@ -82,8 +83,7 @@ svg { flex-shrink: 0; }
 .device-stream { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-top: 18px; padding-top: 15px; border-top: 1px solid #266099; }
 .device-stream strong { overflow: hidden; color: var(--text); font-size: 17px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .stream-detail { overflow: hidden; color: #bdd7f2; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.device-report { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 18px; color: var(--subtle); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; }
-.device-report svg { color: var(--orange); }
+.device-report { margin-top: auto; padding-top: 18px; color: var(--subtle); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; }
 
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin: 22px 0 27px; }
 .metric { display: flex; flex-direction: column; gap: 7px; min-height: 105px; padding: 17px 18px; border: 1px solid var(--line-soft); border-radius: 8px; background: linear-gradient(155deg, #0c2850, #081a35 78%); }

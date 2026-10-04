@@ -20,6 +20,7 @@ function App() {
   const [ready, setReady] = useState(false), [configured, setConfigured] = useState(false);
   const [signedIn, setSignedIn] = useState(false), [error, setError] = useState('');
   const [devices, setDevices] = useState([]), [selected, setSelected] = useState('my-roku');
+  const [selectionRevision, setSelectionRevision] = useState(0);
   const [tab, setTab] = useState('channels'), [categories, setCategories] = useState([]);
   const [category, setCategory] = useState(''), [query, setQuery] = useState('');
   const [page, setPage] = useState(null), [loading, setLoading] = useState(false), [notice, setNotice] = useState('');
@@ -68,6 +69,9 @@ function App() {
     })();
     return () => { controller.abort(); for (const p of pending.current.values()) { clearTimeout(p.timer); p.reject(Error('Connection closed')); } pending.current.clear(); };
   }, [signedIn]);
+  useEffect(() => {
+    if (device?.id === selected && online) loadCatalog('categories', '', 0);
+  }, [selected, online, selectionRevision]);
 
   function request(path, body) {
     const requestId = crypto.randomUUID();
@@ -89,7 +93,11 @@ function App() {
     finally { if (generation === catalogGeneration.current) setLoading(false); }
   }
   function chooseDevice(id) {
-    catalogGeneration.current++; setLoading(false); setSelected(id); setCategories([]); setPage(null); setCategory(''); setQuery(''); setNotice(''); setError('');
+    catalogGeneration.current++; setLoading(false); setSelected(id); setSelectionRevision(revision => revision + 1); setCategories([]); setPage(null); setCategory(''); setQuery(''); setNotice(''); setError('');
+  }
+  function selectCard(id) {
+    if (window.getSelection()?.toString()) return;
+    chooseDevice(id);
   }
   async function tune(channel) {
     setError(''); setNotice(`Requesting ${channel.name}…`);
@@ -124,12 +132,12 @@ function App() {
     <section className="device-grid" aria-label="Roku devices">{devices.map(d => {
       const connected = d.online && link === 'Connected';
       const channel = d.snapshot?.channel;
-      return <button key={d.id} onClick={() => chooseDevice(d.id)} className={`device-card ${selected === d.id ? 'selected' : ''}`} aria-pressed={selected === d.id}>
+      return <div key={d.id} role="button" tabIndex={0} onClick={() => selectCard(d.id)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chooseDevice(d.id); } }} className={`device-card ${selected === d.id ? 'selected' : ''}`} aria-pressed={selected === d.id}>
         <div className="device-top"><span className="device-icon"><Icon name="tv" size={22}/></span><span className={`pill ${connected ? 'is-online' : 'is-offline'}`}><span className={`status-dot ${connected ? 'live' : ''}`}/>{connected ? 'Online' : 'Offline'}</span></div>
         <h2>{d.label}</h2>
         <div className="device-stream"><span className="eyebrow">{connected ? stateName(d.snapshot?.state).toUpperCase() : 'OFFLINE · LAST REPORT'}</span><strong>{channel?.name || 'No active stream'}</strong><span className="stream-detail">{channel ? `${channel.group} · Stream ID ${channel.streamId}` : connected ? 'Select a channel below to begin playback.' : 'Open the IPTV app on this Roku to reconnect.'}</span></div>
-        <div className="device-report"><span>{d.lastSeen ? `Last report ${new Date(d.lastSeen).toLocaleTimeString()}` : 'No reports yet'}</span><Icon name="arrow" size={17}/></div>
-      </button>;
+        <div className="device-report"><span>{d.lastSeen ? `Last report ${new Date(d.lastSeen).toLocaleTimeString()}` : 'No reports yet'}</span></div>
+      </div>;
     })}</section>
     <section className="metrics" aria-label="Playback metrics">{[
       ['Media downloaded', number(metrics.sessionBytes, 1e6), 'MB this app session'],
