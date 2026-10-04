@@ -62,6 +62,8 @@ After deploying this stack and the dashboard, sign in once with the existing pas
 
 The password remains available during enrollment and recovery. Do not disable password authentication until a passkey has been registered and tested on the intended devices. **Account** can request an email change; Cognito keeps the old verified email active until the new address is confirmed with its code. The account's internal username and `sub` remain unchanged, so Roku authorization is preserved. **Account → Reset password** opens Cognito's managed reset page. To replace a passkey, add and test the new one, then remove the old one from **Account**. Password reset codes go to the verified email. Existing sessions must sign out and back in after this deployment to receive the new self-service scope.
 
+The browser keeps the Cognito refresh token in tab-scoped session storage so a page refresh restores the signed-in dashboard. Access tokens stay in memory. Signing out or receiving an invalid refresh token clears the stored session; the Cognito client currently limits refresh tokens to 12 hours.
+
 Use the official Roku device-attestation certificate and verify each physical sideload's developer ID and channel ID. The provided app ZIP is not proof of a physical Roku identity. Build `.private/server.json` from the admin metadata, the trusted certificate, and zero or more verified device authorization files:
 
 ```sh

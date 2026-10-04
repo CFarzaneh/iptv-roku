@@ -57,6 +57,8 @@ For provider changes, the authenticated browser submits the candidate URL/userna
 
 The sole browser administrator signs in through Cognito authorization-code/PKCE. Lambda verifies issuer, client, access-token use/expiry, and the configured administrator `sub` before reading status or enqueuing commands. Public signup is disabled. Roku requests use installation-secret possession plus fresh attestation for session creation; subsequent syncs verify a hashed session token and its expiry against DynamoDB. CORS, User-Agent, source IP, and caller-supplied device IDs do not authenticate a Roku.
 
+The dashboard keeps its access token in memory and its Cognito refresh token in tab-scoped session storage. A page reload exchanges the refresh token for a new access token without showing login; sign-out and rejected refreshes clear the stored token. The configured refresh-token lifetime is 12 hours, after which a fresh sign-in is required.
+
 The dashboard's Account panel uses Cognito's user-scoped API to request and verify a new sign-in email and to list/remove passkeys. The pool keeps the old verified email until the replacement is verified, preserving sign-in and recovery during the transition. Cognito managed login handles password resets and passkey registration; the dashboard never stores a password. The immutable Cognito `sub` remains the Lambda authorization identity, so changing email, password, or passkeys does not change Roku access. The app client requests the `aws.cognito.signin.user.admin` scope only for these self-service actions. A new sign-in is required for existing sessions to receive it.
 
 | Data | Durable owner | AWS copy |

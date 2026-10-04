@@ -10,7 +10,14 @@ try {
   await context.route('**/runtime-config.json', route => route.fulfill({ json: {
     apiUrl: 'https://api.example.test', cognitoDomain: 'https://login.example.test', clientId: 'fixture-client',
   } }));
-  await context.route('https://login.example.test/oauth2/token', route => route.fulfill({ json: { access_token: 'test-only-token', expires_in: 3600 } }));
+  const tokenGrants = [];
+  await context.route('https://login.example.test/oauth2/token', route => {
+    const grant = new URLSearchParams(route.request().postData()).get('grant_type');
+    tokenGrants.push(grant);
+    return route.fulfill({ json: { access_token: 'test-only-token',
+      ...(grant === 'authorization_code' ? { refresh_token: 'test-refresh-token' } : {}), expires_in: 3600 } });
+  });
+  await context.route('https://login.example.test/logout*', route => route.fulfill({ status: 302, headers: { Location: 'http://127.0.0.1:5173/' } }));
   const devices = [{ id: 'my-roku', label: 'My Roku', online: true, lastSeen: Date.now(), results: [], snapshot: {
     appSessionId: 'fixture', sourceRevision: 's1', catalogRevision: 'c1', playbackRevision: 1,
     state: 'playing', channel: { streamId: '42', name: 'World News', group: 'News' },
@@ -33,6 +40,11 @@ try {
   });
   await context.addInitScript(() => { sessionStorage.setItem('oauth-state', 'fixture-state'); sessionStorage.setItem('oauth-verifier', 'fixture-verifier'); });
   await page.goto('http://127.0.0.1:5173/?code=fixture&state=fixture-state');
+  await page.getByRole('heading', { name: 'Devices', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('iptv-dashboard-refresh-token')), 'test-refresh-token');
+  await page.reload();
+  await page.getByRole('heading', { name: 'Devices', exact: true }).waitFor();
+  assert.deepEqual(tokenGrants.slice(0, 2), ['authorization_code', 'refresh_token']);
   await page.getByRole('button', { name: 'Load categories' }).click();
   await page.getByRole('button', { name: 'News', exact: true }).click();
   await page.getByRole('button', { name: /City News/ }).waitFor();
@@ -47,6 +59,10 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile layout overflows');
   await page.getByRole('button', { name: /Dad’s Roku/ }).click();
   assert.equal(await page.getByRole('button', { name: 'Load categories' }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Profile' }).click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('heading', { name: 'Sign in' }).waitFor();
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('iptv-dashboard-refresh-token')), null);
   assert.deepEqual(errors, []);
-  console.info('Browser smoke passed: catalog, provider ID tuning, offline controls, desktop/mobile layout.');
+  console.info('Browser smoke passed: reload, sign-out, catalog, provider ID tuning, offline controls, desktop/mobile layout.');
 } finally { await browser.close(); }

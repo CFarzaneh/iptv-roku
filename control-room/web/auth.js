@@ -1,7 +1,14 @@
 let accessToken = '', refreshToken = '', expiresAt = 0, refreshing;
+let sessionGeneration = 0;
 export let config;
+const refreshTokenKey = 'iptv-dashboard-refresh-token';
 const encode = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const callback = () => `${location.origin}/`;
+function clearSession() {
+  sessionGeneration++;
+  accessToken = ''; refreshToken = ''; expiresAt = 0;
+  sessionStorage.removeItem(refreshTokenKey);
+}
 export async function initialize() {
   const response = await fetch('/runtime-config.json', { cache: 'no-store' });
   config = response.ok && response.headers.get('content-type')?.includes('json') ? await response.json() : {};
@@ -21,19 +28,31 @@ export async function initialize() {
     history.replaceState({}, '', '/');
     if (!verifier || !state || state !== params.get('state')) throw Error('Sign-in expired. Please try again.');
     await exchange({ grant_type: 'authorization_code', code: params.get('code'), code_verifier: verifier, redirect_uri: callback() });
+  } else {
+    refreshToken = sessionStorage.getItem(refreshTokenKey) || '';
+    if (refreshToken) {
+      try { await exchange({ grant_type: 'refresh_token', refresh_token: refreshToken }); }
+      catch (error) { if (refreshToken) throw error; }
+    }
   }
   return true;
 }
 async function exchange(values) {
+  const generation = sessionGeneration;
   const response = await fetch(`${config.cognitoDomain}/oauth2/token`, { method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: config.clientId, ...values }) });
-  if (!response.ok) { accessToken = ''; refreshToken = ''; throw Error('Please sign in again.'); }
+  if (generation !== sessionGeneration) throw Error('Session ended.');
+  if (!response.ok) { clearSession(); throw Error('Please sign in again.'); }
   const data = await response.json();
+  if (generation !== sessionGeneration) throw Error('Session ended.');
+  if (!data.access_token || !data.expires_in) { clearSession(); throw Error('Please sign in again.'); }
   accessToken = data.access_token; refreshToken = data.refresh_token || refreshToken;
   expiresAt = Date.now() + data.expires_in * 1000;
+  if (refreshToken) sessionStorage.setItem(refreshTokenKey, refreshToken);
 }
 export async function login() {
+  clearSession();
   const verifier = encode(crypto.getRandomValues(new Uint8Array(32)));
   const state = encode(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
@@ -56,7 +75,7 @@ export function passwordResetUrl() {
   return url.toString();
 }
 export function logout() {
-  accessToken = ''; refreshToken = '';
+  clearSession();
   location.assign(`${config.cognitoDomain}/logout?${new URLSearchParams({ client_id: config.clientId, logout_uri: callback() })}`);
 }
 export async function api(path, body, signal) {
@@ -68,7 +87,7 @@ export async function api(path, body, signal) {
     headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}) });
   if (!response.ok) {
-    if (response.status === 401) { accessToken = ''; throw Error('Your session expired. Sign in again.'); }
+    if (response.status === 401) { clearSession(); throw Error('Your session expired. Sign in again.'); }
     const codes = { DEVICE_OFFLINE: 'This Roku is offline.', STALE_CATALOG: 'The channel list changed. Refresh channels.',
       STALE_PLAYBACK: 'Playback changed on the TV. Try again.', DEVICE_BUSY: 'The Roku is busy. Try again shortly.',
       FORBIDDEN: 'This login is not the dashboard administrator.',
