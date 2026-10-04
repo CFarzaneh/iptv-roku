@@ -13,7 +13,7 @@ async function prepare() {
   const verifiers = await productionVerifiers(config);
   const auth = new DynamoAuth(config, verifiers, db, table);
   const relay = new DynamoRelay(config.devices, db, table);
-  const app = createApp(config, verifiers, { auth, relay });
+  const app = createApp(config, verifiers, { auth, relay, cors: false });
   await app.ready();
   return awsLambdaFastify(app);
 }

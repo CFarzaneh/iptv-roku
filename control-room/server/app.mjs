@@ -11,7 +11,8 @@ export function createApp(config, verifiers, options = {}) {
   const auth = options.auth || new Auth(config, verifiers, now);
   const relay = options.relay || new Relay(config.devices, now);
   app.decorate('authState', auth); app.decorate('relay', relay);
-  app.register(cors, { origin: config.origins, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] });
+  // Lambda Function URL adds CORS headers in production; avoid duplicate values.
+  if (options.cors !== false) app.register(cors, { origin: config.origins, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] });
   app.addHook('onSend', async (_request, reply) => {
     reply.header('Cache-Control', 'no-store');
     reply.header('X-Content-Type-Options', 'nosniff');

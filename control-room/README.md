@@ -95,6 +95,7 @@ The current TV's favorites/recents recovery seed can be captured before replacin
 - DynamoDB TTL cleanup is asynchronous. Every read also checks the logical deadline, and expired sensitive commands are explicitly deleted. The table does not hold viewing history or a full catalog.
 - Session/media counters come from reported player data, not a network proxy. Missing metrics display unavailable. Cloud failures cannot interrupt direct local playback.
 - A Lambda Function URL terminates public HTTPS. Application code verifies Cognito access JWTs for browser requests and a short-lived attested device session for Roku requests.
+- The Function URL is the sole production CORS layer. The browser trims its trailing API URL slash before joining route paths; local Fastify runs may enable their own CORS handler.
 
 After deploying, `AWS_PROFILE=iptv-cdk-process AWS_CONFIG_FILE=.private/aws-cdk-config node scripts/smoke-dynamo.mjs` exercises an isolated temporary mailbox record and deletes it. Run this only against the intended account and table.
 

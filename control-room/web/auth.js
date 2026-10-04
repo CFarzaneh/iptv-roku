@@ -12,6 +12,7 @@ export async function initialize() {
     const u = new URL(config[key]);
     if (u.protocol !== 'https:' && !(import.meta.env.DEV && u.hostname === '127.0.0.1')) throw Error('Secure configuration required');
   }
+  config.apiUrl = config.apiUrl.replace(/\/+$/, '');
   const params = new URLSearchParams(location.search);
   if (params.has('error')) { history.replaceState({}, '', '/'); throw Error('Sign-in was not completed. Please try again.'); }
   if (params.has('code')) {
@@ -51,7 +52,7 @@ export async function api(path, body, signal) {
     refreshing ||= exchange({ grant_type: 'refresh_token', refresh_token: refreshToken }).finally(() => { refreshing = null; });
     await refreshing;
   }
-  const response = await fetch(`${config.apiUrl}${path}`, { method: body ? 'POST' : 'GET', signal,
+  const response = await fetch(`${config.apiUrl}/${path.replace(/^\/+/, '')}`, { method: body ? 'POST' : 'GET', signal,
     headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}) });
   if (!response.ok) {
