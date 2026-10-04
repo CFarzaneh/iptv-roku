@@ -25,6 +25,7 @@ export class ControlRoomStack extends Stack {
     const pool = new UserPool(this, 'Administrators', {
       userPoolName: 'iptv-control-room-admin', selfSignUpEnabled: false,
       signInAliases: { username: true, email: true },
+      keepOriginal: { email: true },
       accountRecovery: AccountRecovery.EMAIL_ONLY,
       passwordPolicy: { minLength: 14, requireDigits: true, requireLowercase: true, requireUppercase: true, requireSymbols: true },
       featurePlan: FeaturePlan.ESSENTIALS,
@@ -35,7 +36,7 @@ export class ControlRoomStack extends Stack {
     const client = pool.addClient('DashboardClient', {
       generateSecret: false, preventUserExistenceErrors: true,
       authFlows: { user: true, userSrp: true },
-      oAuth: { flows: { authorizationCodeGrant: true }, scopes: [OAuthScope.OPENID, OAuthScope.EMAIL], callbackUrls: [website], logoutUrls: [website] },
+      oAuth: { flows: { authorizationCodeGrant: true }, scopes: [OAuthScope.OPENID, OAuthScope.EMAIL, OAuthScope.COGNITO_ADMIN], callbackUrls: [website], logoutUrls: [website] },
       accessTokenValidity: Duration.minutes(15), idTokenValidity: Duration.minutes(15), refreshTokenValidity: Duration.hours(12),
       enableTokenRevocation: true,
     });

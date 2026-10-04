@@ -4,12 +4,14 @@ import { z } from 'zod';
 import { Auth, ApiError, bearer, requireThat } from './auth.mjs';
 import { Relay } from './state.mjs';
 import * as schema from './schema.mjs';
+import { accountService } from './account.mjs';
 
 export function createApp(config, verifiers, options = {}) {
   const app = Fastify({ logger: false, bodyLimit: 256 * 1024, requestTimeout: 40000, trustProxy: false });
   const now = options.now || Date.now;
   const auth = options.auth || new Auth(config, verifiers, now);
   const relay = options.relay || new Relay(config.devices, now);
+  const account = options.account || accountService(config.region || 'us-east-2');
   app.decorate('authState', auth); app.decorate('relay', relay);
   // Lambda Function URL adds CORS headers in production; avoid duplicate values.
   if (options.cors !== false) app.register(cors, { origin: config.origins, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] });
@@ -27,8 +29,12 @@ export function createApp(config, verifiers, options = {}) {
   }
   const admin = async request => {
     rate('admin', 300);
-    try { await verifiers.admin(bearer(request)); }
+    try { request.adminClaims = await verifiers.admin(bearer(request)); }
     catch (e) { if (e instanceof ApiError) throw e; throw new ApiError(401, 'UNAUTHORIZED'); }
+  };
+  const accountAdmin = async request => {
+    await admin(request);
+    requireThat(request.adminClaims?.scope?.split(' ').includes('aws.cognito.signin.user.admin'), 403, 'REAUTH_REQUIRED');
   };
   const device = async request => {
     const token = bearer(request), session = await auth.device(token);
@@ -43,6 +49,13 @@ export function createApp(config, verifiers, options = {}) {
   };
   app.setErrorHandler((error, request, reply) => {
     // Validation/auth errors and provider bodies must never be serialized into logs or replies.
+    if (request.url.startsWith('/account') && !(error instanceof ApiError)) {
+      const cognitoErrors = { CodeMismatchException: [400, 'INVALID_CODE'],
+        ExpiredCodeException: [400, 'EXPIRED_CODE'], AliasExistsException: [409, 'EMAIL_IN_USE'],
+        LimitExceededException: [429, 'RATE_LIMITED'], TooManyRequestsException: [429, 'RATE_LIMITED'],
+        NotAuthorizedException: [403, 'REAUTH_REQUIRED'], InvalidParameterException: [400, 'INVALID_REQUEST'] };
+      if (cognitoErrors[error.name]) error = new ApiError(...cognitoErrors[error.name]);
+    }
     const status = error instanceof z.ZodError ? 400 : (error.statusCode || 500);
     if (request.url === '/device/auth/session') {
       console.info(JSON.stringify({ event: 'device-auth-session', status,
@@ -52,6 +65,26 @@ export function createApp(config, verifiers, options = {}) {
     reply.code(status).send({ error: error instanceof ApiError ? error.code : status < 500 ? 'INVALID_REQUEST' : 'SERVER_ERROR' });
   });
   app.get('/health', async () => ({ ok: true, region: 'us-east-2' }));
+  app.get('/account', { preHandler: accountAdmin }, request => account.view(bearer(request)));
+  app.post('/account/email', { preHandler: accountAdmin }, async request => {
+    const { email } = z.object({ email: z.email().max(254) }).strict().parse(request.body);
+    await account.updateEmail(bearer(request), email);
+    return { ok: true };
+  });
+  app.post('/account/verify-email', { preHandler: accountAdmin }, async request => {
+    const { code } = z.object({ code: z.string().trim().min(4).max(16) }).strict().parse(request.body);
+    await account.verifyEmail(bearer(request), code);
+    return { ok: true };
+  });
+  app.post('/account/resend-email-code', { preHandler: accountAdmin }, async request => {
+    await account.resendEmailCode(bearer(request));
+    return { ok: true };
+  });
+  app.post('/account/delete-passkey', { preHandler: accountAdmin }, async request => {
+    const { credentialId } = z.object({ credentialId: z.string().min(1).max(4096) }).strict().parse(request.body);
+    await account.deletePasskey(bearer(request), credentialId);
+    return { ok: true };
+  });
   app.get('/devices', { preHandler: admin }, async () => relay.view());
   app.get('/events', { preHandler: admin }, async (request, reply) => {
     const cursor = z.string().max(100).optional().parse(request.query.cursor);

@@ -39,7 +39,7 @@ export async function login() {
   const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
   sessionStorage.setItem('oauth-verifier', verifier); sessionStorage.setItem('oauth-state', state);
   location.assign(`${config.cognitoDomain}/oauth2/authorize?${new URLSearchParams({ client_id: config.clientId,
-    response_type: 'code', scope: 'openid email', redirect_uri: callback(), state,
+    response_type: 'code', scope: 'openid email aws.cognito.signin.user.admin', redirect_uri: callback(), state,
     code_challenge_method: 'S256', code_challenge: challenge })}`);
 }
 export function authenticated() { return Boolean(accessToken); }
@@ -47,6 +47,12 @@ export function passkeyEnrollmentUrl() {
   if (!authenticated()) throw Error('Sign in before adding a passkey.');
   const url = new URL('/passkeys/add', config.cognitoDomain);
   url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: callback() }).toString();
+  return url.toString();
+}
+export function passwordResetUrl() {
+  const url = new URL('/forgotPassword', config.cognitoDomain);
+  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: callback(),
+    response_type: 'code', scope: 'openid email aws.cognito.signin.user.admin' }).toString();
   return url.toString();
 }
 export function logout() {
@@ -65,7 +71,10 @@ export async function api(path, body, signal) {
     if (response.status === 401) { accessToken = ''; throw Error('Your session expired. Sign in again.'); }
     const codes = { DEVICE_OFFLINE: 'This Roku is offline.', STALE_CATALOG: 'The channel list changed. Refresh channels.',
       STALE_PLAYBACK: 'Playback changed on the TV. Try again.', DEVICE_BUSY: 'The Roku is busy. Try again shortly.',
-      FORBIDDEN: 'This login is not the dashboard administrator.' };
+      FORBIDDEN: 'This login is not the dashboard administrator.',
+      REAUTH_REQUIRED: 'Sign out and sign in again to enable account settings.',
+      INVALID_CODE: 'That verification code is incorrect.', EXPIRED_CODE: 'That code expired. Request another one.',
+      EMAIL_IN_USE: 'That email is already used by another account.', RATE_LIMITED: 'Too many attempts. Wait a few minutes and try again.' };
     const data = await response.json().catch(() => ({}));
     throw Error(codes[data.error] || 'The request could not be completed. Please try again.');
   }

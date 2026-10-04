@@ -132,5 +132,49 @@ function App() {
     <footer><span>IPTV Player · Device administration</span><span>Media counters exclude network overhead.</span></footer></main></div>;
 }
 function Brand() { return <div className="brand"><span className="brand-mark"><Icon name="tv" size={19}/></span><span>IPTV <strong>Player</strong></span></div>; }
-function AppHeader({ link }) { return <div className="app-header"><div className="header-inner"><Brand/><div className="header-actions"><span className={`connection ${link === 'Connected' ? 'connected' : ''}`}><span className={`status-dot ${link === 'Connected' ? 'live' : ''}`}/>{link === 'Connected' ? 'API connected' : 'API reconnecting'}</span><a className="text-button" href={auth.passkeyEnrollmentUrl()} target="_blank" rel="noopener noreferrer">Add passkey</a><button className="text-button" onClick={auth.logout}>Sign out</button></div></div></div>; }
+function AppHeader({ link }) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  return <><div className="app-header"><div className="header-inner"><Brand/><div className="header-actions"><span className={`connection ${link === 'Connected' ? 'connected' : ''}`}><span className={`status-dot ${link === 'Connected' ? 'live' : ''}`}/>{link === 'Connected' ? 'API connected' : 'API reconnecting'}</span><button className="text-button" onClick={() => setAccountOpen(true)}>Account</button><button className="text-button" onClick={auth.logout}>Sign out</button></div></div></div>{accountOpen && <AccountPanel onClose={() => setAccountOpen(false)}/>}</>;
+}
+function AccountPanel({ onClose }) {
+  const [account, setAccount] = useState(null), [email, setEmail] = useState(''), [code, setCode] = useState('');
+  const [pendingEmail, setPendingEmail] = useState(sessionStorage.getItem('pending-admin-email') || '');
+  const [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [failure, setFailure] = useState('');
+  async function load() {
+    try { const current = await auth.api('/account'); setAccount(current); setEmail(current.email); }
+    catch (e) { setFailure(e.message); }
+  }
+  useEffect(() => { load(); }, []);
+  async function run(action, success) {
+    setBusy(true); setFailure(''); setMessage('');
+    try { await action(); await load(); setMessage(success); }
+    catch (e) { setFailure(e.message); }
+    finally { setBusy(false); }
+  }
+  function requestEmail(e) {
+    e.preventDefault();
+    run(async () => { await auth.api('/account/email', { email: email.trim() });
+      setPendingEmail(email.trim()); sessionStorage.setItem('pending-admin-email', email.trim());
+    }, `Verification code sent to ${email.trim()}. Your old email works until you verify the new one.`);
+  }
+  function verifyEmail(e) {
+    e.preventDefault();
+    run(async () => { await auth.api('/account/verify-email', { code: code.trim() });
+      setPendingEmail(''); sessionStorage.removeItem('pending-admin-email'); setCode('');
+    }, 'Email verified. Use the new address when you next sign in.');
+  }
+  async function removePasskey(passkey) {
+    if (!window.confirm(`Remove passkey “${passkey.name || 'Unnamed passkey'}”? Add and test your replacement first.`)) return;
+    await run(() => auth.api('/account/delete-passkey', { credentialId: passkey.id }), 'Passkey removed.');
+  }
+  return <div className="account-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section className="account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title"><div className="account-title"><div><span className="eyebrow">ADMINISTRATOR</span><h2 id="account-title">Account</h2></div><button className="account-close" aria-label="Close account settings" onClick={onClose}>×</button></div>
+    {failure && <div className="alert" role="alert">{failure}</div>}{message && <div className="notice" role="status">{message}</div>}
+    {!account ? <p className="account-muted">Loading account…</p> : <>
+      <div className="account-section"><h3>Sign-in email</h3><p>Current: <strong>{account.email}</strong>{account.emailVerified ? ' · verified' : ' · unverified'}</p><form onSubmit={requestEmail}><label>New email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email"/></label><button className="secondary" disabled={busy || email.trim() === account.email}>Send verification code</button></form>
+      {pendingEmail && <form onSubmit={verifyEmail}><p>Enter the code sent to <strong>{pendingEmail}</strong>.</p><label>Verification code<input required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)}/></label><div className="account-actions"><button className="primary" disabled={busy || !code.trim()}>Verify new email</button><button type="button" className="text-button" disabled={busy} onClick={() => run(() => auth.api('/account/resend-email-code', {}), 'A new code was sent.')}>Resend code</button></div></form>}</div>
+      <div className="account-section"><h3>Password</h3><p>Reset it through Cognito. The code goes to your verified email.</p><a className="secondary" href={auth.passwordResetUrl()} target="_blank" rel="noopener noreferrer">Reset password <Icon name="arrow" size={15}/></a></div>
+      <div className="account-section"><h3>Passkeys</h3><p>Add the replacement first, sign out and test it, then remove the old one.</p><div className="account-actions"><a className="secondary" href={auth.passkeyEnrollmentUrl()} target="_blank" rel="noopener noreferrer">Add passkey <Icon name="arrow" size={15}/></a><button className="text-button" disabled={busy} onClick={load}>Refresh list</button></div><div className="passkey-list">{account.passkeys.length ? account.passkeys.map(passkey => <div className="passkey-row" key={passkey.id}><span><strong>{passkey.name || 'Passkey'}</strong><small>{passkey.createdAt ? `Added ${new Date(passkey.createdAt).toLocaleDateString()}` : ''}</small></span><button className="text-button" disabled={busy} onClick={() => removePasskey(passkey)}>Remove</button></div>) : <p>No passkeys registered.</p>}</div></div>
+    </>}
+  </section></div>;
+}
 createRoot(document.getElementById('root')).render(<App/>);

@@ -14,9 +14,10 @@ test('CDK retains private login and hosting, adds one small TTL mailbox, and rem
   template.hasResourceProperties('AWS::Cognito::UserPool', { AdminCreateUserConfig: { AllowAdminCreateUserOnly: true } });
   template.hasResourceProperties('AWS::Cognito::UserPool', { UserPoolTier: 'ESSENTIALS',
     Policies: Match.objectLike({ SignInPolicy: { AllowedFirstAuthFactors: ['PASSWORD', 'WEB_AUTHN'] } }),
-    WebAuthnUserVerification: 'required' });
+    WebAuthnUserVerification: 'required', UserAttributeUpdateSettings: { AttributesRequireVerificationBeforeUpdate: ['email'] } });
   template.hasResourceProperties('AWS::Cognito::UserPoolClient', { GenerateSecret: false, AllowedOAuthFlows: ['code'],
-    ExplicitAuthFlows: Match.arrayWith(['ALLOW_USER_AUTH']) });
+    ExplicitAuthFlows: Match.arrayWith(['ALLOW_USER_AUTH']),
+    AllowedOAuthScopes: Match.arrayWith(['aws.cognito.signin.user.admin']) });
   template.hasResourceProperties('AWS::Cognito::UserPoolDomain', { ManagedLoginVersion: 2 });
   template.hasResourceProperties('AWS::Cognito::ManagedLoginBranding', {
     Settings: Match.objectLike({ categories: { global: { colorSchemeMode: 'DARK' } } }),
