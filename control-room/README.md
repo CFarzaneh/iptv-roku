@@ -93,7 +93,19 @@ AWS_PROFILE=cam node scripts/publish-dashboard.mjs
 
 The default Amplify URL and Cognito redirects come from CDK. The publish script uploads only the built dashboard. CDK overrides relay origins and Cognito identifiers with the actual stack resources. CDK output is ignored because it can contain private authorization metadata. Keep the relayImage/relayConfig context on subsequent deployments so a redeploy does not remove the application configuration.
 
-Copy the selected TV's private dashboard.json to `../source/dashboard.json` before packaging the Roku app with the existing deployment tooling. It is included because the existing package contains `source/`. Do not reuse one personalized package for both TVs. Existing provider settings continue working; a missing dashboard.json leaves cloud control dormant.
+Build a separate private ZIP for each TV. The packager reads its dashboard identity directly without modifying the shared source tree, and it excludes any restore seed unless you explicitly select one. For the current TV, capture its favorites first and require that seed when building. Dad's fresh install can start with an empty provider and receive its credentials later through the dashboard. If Dad is replacing an existing sideload, capture his favorites on his device first.
+
+```sh
+python3 ../tools/package_personalized.py my-roku \
+  --dashboard .private/my-roku/dashboard.json --provider-config ../config.json \
+  --restore-seed ../source/restore.json --require-restore \
+  --output ../builds/my-roku-v1.0.20.zip
+python3 ../tools/package_personalized.py dads-roku \
+  --dashboard .private/dads-roku/dashboard.json --empty-provider \
+  --output ../builds/dads-roku-v1.0.20.zip
+```
+
+Never reuse one personalized package for both TVs. The ZIPs contain provider credentials or installation secrets and stay under ignored `builds/`. Creating a ZIP does not install it. A missing `source/dashboard.json` leaves cloud control dormant.
 
 ## Behavior and boundaries
 
