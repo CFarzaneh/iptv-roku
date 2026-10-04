@@ -14,6 +14,38 @@ function dashboardNow() as double
     return CreateObject("roDateTime").AsSeconds() * 1000.0
 end function
 
+' BrightScript's unquoted associative-array keys become lowercase. Restore the
+' API's JSON field names at the network boundary, including nested telemetry.
+function dashboardWire(value as dynamic) as dynamic
+    if value = invalid then return invalid
+    if GetInterface(value, "ifArray") <> invalid
+        entries = []
+        for each entry in value
+            entries.Push(dashboardWire(entry))
+        end for
+        return entries
+    end if
+    if GetInterface(value, "ifAssociativeArray") <> invalid
+        names = {
+            appsessionid: "appSessionId", challengeid: "challengeId",
+            sourcerevision: "sourceRevision", catalogrevision: "catalogRevision",
+            playbackrevision: "playbackRevision", streamid: "streamId",
+            commandid: "commandId", appversion: "appVersion", osversion: "osVersion",
+            sessionbytes: "sessionBytes", tunebytes: "tuneBytes",
+            bytespersecond: "bytesPerSecond", startupms: "startupMs",
+            bufferingcount: "bufferingCount", bufferingms: "bufferingMs"
+        }
+        result = {}
+        for each key in value
+            wireKey = names[LCase(key)]
+            if wireKey = invalid then wireKey = key
+            result[wireKey] = dashboardWire(value[key])
+        end for
+        return result
+    end if
+    return value
+end function
+
 function dashboardChannelId(channel as object) as string
     if channel.providerStreamId <> invalid then return dashboardText(channel.providerStreamId)
     return dashboardText(channel.dashboardId)

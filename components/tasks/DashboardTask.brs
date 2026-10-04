@@ -69,13 +69,21 @@ end function
 function dashboardAuthPost(path as string, data as object) as dynamic
     port = CreateObject("roMessagePort")
     req = dashboardTransfer(path, m.installationSecret, port)
-    if not req.AsyncPostFromString(FormatJson(data)) then return invalid
+    if not req.AsyncPostFromString(FormatJson(dashboardWire(data)))
+        print "CONTROL_ROOM auth send failed " + path
+        return invalid
+    end if
     ev = wait(15000, port)
     if type(ev) <> "roUrlEvent"
         req.AsyncCancel()
+        print "CONTROL_ROOM auth timeout " + path
         return invalid
     end if
-    if ev.GetResponseCode() <> 200 then return invalid
+    if ev.GetResponseCode() <> 200
+        print "CONTROL_ROOM auth HTTP " + path + " " + Str(ev.GetResponseCode())
+        return invalid
+    end if
+    print "CONTROL_ROOM auth HTTP " + path + " 200"
     return ParseJson(ev.GetString())
 end function
 
@@ -83,26 +91,32 @@ sub dashboardAuthenticate()
     m.top.connectionState = "authenticating"
     challenge = dashboardAuthPost("/device/auth/challenge", {})
     if challenge = invalid or challenge.nonce = invalid
+        print "CONTROL_ROOM challenge response invalid"
         dashboardDisconnect()
         return
     end if
     store = CreateObject("roChannelStore")
     proof = store.GetDeviceAttestation(challenge.nonce)
     if proof = invalid
+        print "CONTROL_ROOM attestation invalid"
         dashboardDisconnect()
         return
     end if
     if GetInterface(proof, "ifAssociativeArray") = invalid
+        print "CONTROL_ROOM attestation unexpected type " + type(proof)
         dashboardDisconnect()
         return
     end if
     token = dashboardText(proof.token)
     if proof.status <> 0 or token = ""
+        print "CONTROL_ROOM attestation status " + dashboardText(proof.status) + " token-length " + Str(token.Len())
         dashboardDisconnect()
         return
     end if
+    print "CONTROL_ROOM attestation accepted locally"
     session = dashboardAuthPost("/device/auth/session", { challengeId: challenge.challengeId, attestation: token, appSessionId: m.snapshot.appSessionId })
     if session = invalid or session.sessionToken = invalid
+        print "CONTROL_ROOM session response invalid"
         dashboardDisconnect()
         return
     end if
@@ -112,6 +126,7 @@ sub dashboardAuthenticate()
     m.backoff = 1000
     m.retryAt = 0
     m.top.connectionState = "connected"
+    print "CONTROL_ROOM connected"
 end sub
 
 sub dashboardSync()
@@ -123,7 +138,7 @@ sub dashboardSync()
     m.sentCount = batch.Count()
     m.syncStarted = dashboardNow()
     m.lastSyncAt = m.syncStarted
-    if not m.sync.AsyncPostFromString(FormatJson({ snapshot: m.snapshot, results: batch })) then dashboardDisconnect()
+    if not m.sync.AsyncPostFromString(FormatJson(dashboardWire({ snapshot: m.snapshot, results: batch }))) then dashboardDisconnect()
 end sub
 
 sub dashboardSyncResponse(ev as object)
@@ -132,6 +147,7 @@ sub dashboardSyncResponse(ev as object)
     code = ev.GetResponseCode()
     m.sync = invalid
     if code <> 200
+        print "CONTROL_ROOM sync HTTP " + Str(code)
         dashboardDisconnect()
         return
     end if

@@ -12,10 +12,12 @@ const account = JSON.parse(execFileSync(aws, ['sts', 'get-caller-identity', '--p
 const localProfile = 'iptv-cdk-process';
 mkdirSync('.private', { recursive: true, mode: 0o700 });
 const bridge = resolve('.private/aws-cdk-config');
+const cdkHome = resolve('.private/cdk-home');
+mkdirSync(cdkHome, { recursive: true, mode: 0o700 });
 writeFileSync(bridge, `[profile ${localProfile}]\ncredential_process = env AWS_CONFIG_FILE="${originalConfig}" "${aws}" configure export-credentials --profile "${profile}" --format process\nregion = us-east-2\n`, { mode: 0o600 });
 const result = spawnSync('pnpm', ['cdk', ...process.argv.slice(2)], {
   env: { ...process.env, AWS_CONFIG_FILE: bridge, AWS_PROFILE: localProfile,
-    AWS_REGION: 'us-east-2', CDK_DEFAULT_ACCOUNT: account },
+    AWS_REGION: 'us-east-2', CDK_DEFAULT_ACCOUNT: account, CDK_HOME: cdkHome },
   stdio: 'inherit',
 });
 if (result.error) throw result.error;

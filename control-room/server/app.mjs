@@ -40,9 +40,14 @@ export function createApp(config, verifiers, options = {}) {
     request.raw.once('aborted', () => controller.abort());
     return controller.signal;
   };
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     // Validation/auth errors and provider bodies must never be serialized into logs or replies.
     const status = error instanceof z.ZodError ? 400 : (error.statusCode || 500);
+    if (request.url === '/device/auth/session') {
+      console.info(JSON.stringify({ event: 'device-auth-session', status,
+        reason: error instanceof ApiError ? error.code : error instanceof z.ZodError ? 'INVALID_BODY' : 'SERVER_ERROR',
+        fields: error instanceof z.ZodError ? error.issues.map(issue => ({ path: issue.path.join('.'), code: issue.code })) : undefined }));
+    }
     reply.code(status).send({ error: error instanceof ApiError ? error.code : status < 500 ? 'INVALID_REQUEST' : 'SERVER_ERROR' });
   });
   app.get('/health', async () => ({ ok: true, region: 'us-east-2' }));
@@ -66,7 +71,9 @@ export function createApp(config, verifiers, options = {}) {
   app.post('/device/auth/session', async request => {
     rate('authentication', 60);
     const body = z.object({ challengeId: z.string().max(100), attestation: z.string().max(16384), appSessionId: z.string().min(1).max(160) }).strict().parse(request.body);
-    return await auth.session(bearer(request), body);
+    const result = await auth.session(bearer(request), body);
+    console.info(JSON.stringify({ event: 'device-auth-session', status: 200 }));
+    return result;
   });
   app.post('/device/sync', async request => {
     const { session } = await device(request);
