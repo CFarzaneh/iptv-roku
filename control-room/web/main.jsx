@@ -22,6 +22,7 @@ function App() {
   const [ready, setReady] = useState(false), [configured, setConfigured] = useState(false);
   const [signedIn, setSignedIn] = useState(false), [error, setError] = useState('');
   const [devices, setDevices] = useState([]), [selected, setSelected] = useState(null);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('device-sidebar-collapsed') === 'true');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [compactViewport, setCompactViewport] = useState(() => window.matchMedia('(max-width: 850px)').matches);
@@ -58,7 +59,7 @@ function App() {
       while (!controller.signal.aborted) {
         try {
           const data = await auth.api(`/events?cursor=${encodeURIComponent(cursor)}`, null, controller.signal);
-          cursor = data.cursor; setDevices(data.devices); setLink('Connected');
+          cursor = data.cursor; setDevices(data.devices); setDevicesLoaded(true); setLink('Connected');
           if (!manualSelection.current && !defaultSelectionSettled.current && data.devices.length) {
             const firstOnline = data.devices.find(d => d.id === 'my-roku' && d.online) || data.devices.find(d => d.online);
             if (firstOnline) {
@@ -147,9 +148,9 @@ function App() {
         : e.message);
     }
   }
-  if (!ready) return <div className="entry"><Brand/><p>Connecting…</p></div>;
+  if (!ready || (signedIn && !devicesLoaded)) return <div className="entry"><Brand/><p role="status">Loading…</p>{error && <div className="alert" role="alert">{error}</div>}</div>;
   if (!signedIn) return <div className="login"><main className="login-panel"><div className="login-top"><Brand/></div><div className="login-copy"><span className="eyebrow">DEVICE ADMINISTRATION</span><h1>Sign in</h1><p>View Roku status, change channels, and manage provider settings.</p></div>{error && <div role="alert" className="alert">{error}</div>}{configured ? <button className="primary" onClick={() => auth.login().catch(e => setError(e.message))}>Continue to sign in <Icon name="arrow" size={17}/></button> : <div className="setup">Sign-in is unavailable. Try again shortly.</div>}</main></div>;
-  if (!devices.length) return <div className="shell"><AppHeader/><main className="workspace"><div className="page-heading"><h1>Devices</h1></div>{error && <div className="alert" role="alert">{error}</div>}<section className="panel empty"><Icon name="tv" size={36}/><h2>{link === 'Connected' ? 'No devices yet' : 'Loading devices'}</h2><p>{link === 'Connected' ? 'Open IPTV Player on a Roku to connect.' : 'Please wait.'}</p></section></main></div>;
+  if (!devices.length) return <div className="shell"><AppHeader/><main className="workspace"><div className="page-heading"><h1>Devices</h1></div>{error && <div className="alert" role="alert">{error}</div>}<section className="panel empty"><Icon name="tv" size={36}/><h2>No devices yet</h2><p>Open IPTV Player on a Roku to connect.</p></section></main></div>;
 
   return <div className="shell"><AppHeader/>
     <div className={`dashboard-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
