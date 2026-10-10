@@ -33,6 +33,7 @@ function App() {
   const [link, setLink] = useState('Connecting');
   const pending = useRef(new Map()), catalogGeneration = useRef(0);
   const manualSelection = useRef(false);
+  const defaultSelectionSettled = useRef(false);
   const selectedRef = useRef(selected); selectedRef.current = selected;
   const device = devices.find(d => d.id === selected) || devices[0];
   const snapshot = device?.snapshot, metrics = snapshot?.metrics || {};
@@ -58,11 +59,14 @@ function App() {
         try {
           const data = await auth.api(`/events?cursor=${encodeURIComponent(cursor)}`, null, controller.signal);
           cursor = data.cursor; setDevices(data.devices); setLink('Connected');
-          if (!manualSelection.current && data.devices.length) {
-            setSelected(current => {
-              if (current && data.devices.some(d => d.id === current && d.online)) return current;
-              return (data.devices.find(d => d.id === 'my-roku' && d.online) || data.devices.find(d => d.online) || data.devices.find(d => d.id === 'my-roku') || data.devices[0]).id;
-            });
+          if (!manualSelection.current && !defaultSelectionSettled.current && data.devices.length) {
+            const firstOnline = data.devices.find(d => d.id === 'my-roku' && d.online) || data.devices.find(d => d.online);
+            if (firstOnline) {
+              defaultSelectionSettled.current = true;
+              setSelected(firstOnline.id);
+            } else if (!selectedRef.current || !data.devices.some(d => d.id === selectedRef.current)) {
+              setSelected((data.devices.find(d => d.id === 'my-roku') || data.devices[0]).id);
+            }
           }
           for (const d of data.devices) for (const result of d.results || []) {
             const p = pending.current.get(result.requestId);
