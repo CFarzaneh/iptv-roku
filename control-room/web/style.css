@@ -104,9 +104,10 @@ svg { flex-shrink: 0; }
 .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 13px; border: 1px solid #2576ad; border-radius: 6px; background: #0e3969; color: #d6f4ff; font-size: 11px; white-space: nowrap; }
 .secondary:hover:not(:disabled), .search button:hover:not(:disabled) { background: #145494; }
 .catalog { display: flex; min-height: 320px; }
-.categories { width: 220px; flex-shrink: 0; max-height: 550px; overflow: auto; padding: 10px; border-right: 1px solid var(--line-soft); background: #071832; }
-.categories > p { padding: 16px 10px; color: var(--subtle); font-size: 11px; line-height: 1.6; }
+.categories { width: 220px; flex-shrink: 0; max-height: 550px; overflow-x: hidden; overflow-y: auto; touch-action: pan-y pinch-zoom; padding: 10px; border-right: 1px solid var(--line-soft); background: #071832; }
+.categories > p { overflow-wrap: anywhere; padding: 16px 10px; color: var(--subtle); font-size: 11px; line-height: 1.6; }
 .categories button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 10px; border: 0; border-radius: 5px; background: none; color: var(--muted); text-align: left; font-size: 11px; }
+.category-name { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .categories button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 .categories button.chosen { background: #0e497f; color: #e0f5ff; box-shadow: inset 2px 0 var(--orange); }
 .channel-list { flex: 1; min-width: 0; max-height: 550px; overflow: auto; }
