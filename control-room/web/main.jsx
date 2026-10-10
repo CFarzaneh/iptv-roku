@@ -15,6 +15,7 @@ const Icon = ({ name, size = 20 }) => <svg width={size} height={size} viewBox="0
 })[name]}</svg>;
 const number = (value, divisor = 1) => value == null ? '—' : (value / divisor).toLocaleString(undefined, { maximumFractionDigits: 1 });
 const stateName = value => ({ idle: 'Idle', tuning: 'Tuning', playing: 'Playing', buffering: 'Buffering', paused: 'Paused', error: 'Playback error', stopped: 'Stopped' })[value] || 'Unknown';
+const lastReport = value => value ? `Last report: ${new Date(value).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` : 'No reports yet';
 
 function App() {
   const [ready, setReady] = useState(false), [configured, setConfigured] = useState(false);
@@ -136,7 +137,7 @@ function App() {
         <div className="device-top"><span className="device-icon"><Icon name="tv" size={22}/></span><span className={`pill ${connected ? 'is-online' : 'is-offline'}`}><span className={`status-dot ${connected ? 'live' : ''}`}/>{connected ? 'Online' : 'Offline'}</span></div>
         <h2>{d.label}</h2>
         <div className="device-stream"><span className="eyebrow">{connected ? stateName(d.snapshot?.state).toUpperCase() : 'OFFLINE · LAST REPORT'}</span><strong>{channel?.name || 'No active stream'}</strong><span className="stream-detail">{channel ? `${channel.group} · Stream ID ${channel.streamId}` : connected ? 'Select a channel below to begin playback.' : 'Open the IPTV app on this Roku to reconnect.'}</span></div>
-        <div className="device-report"><span>{d.lastSeen ? `Last report ${new Date(d.lastSeen).toLocaleTimeString()}` : 'No reports yet'}</span></div>
+        <div className="device-report"><span>{lastReport(d.lastSeen)}</span></div>
       </div>;
     })}</section>
     <section className="metrics" aria-label="Playback metrics">{[
