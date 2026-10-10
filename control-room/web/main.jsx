@@ -28,6 +28,8 @@ function App() {
   const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('device-sidebar-collapsed') === 'true');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarDrag, setSidebarDrag] = useState(null);
+  const sidebarGesture = useRef(null), suppressSidebarClick = useRef(false);
   const [compactViewport, setCompactViewport] = useState(() => window.matchMedia('(max-width: 850px)').matches);
   const [selectionRevision, setSelectionRevision] = useState(0);
   const [tab, setTab] = useState('channels'), [categories, setCategories] = useState([]);
@@ -47,7 +49,7 @@ function App() {
   useEffect(() => { localStorage.setItem('device-sidebar-collapsed', String(sidebarCollapsed)); }, [sidebarCollapsed]);
   useEffect(() => {
     const media = window.matchMedia('(max-width: 850px)');
-    const changed = () => { setCompactViewport(media.matches); setMobileSidebarOpen(false); };
+    const changed = () => { setCompactViewport(media.matches); setMobileSidebarOpen(false); setSidebarDrag(null); sidebarGesture.current = null; };
     media.addEventListener('change', changed);
     return () => media.removeEventListener('change', changed);
   }, []);
@@ -119,6 +121,33 @@ function App() {
     } catch (e) { if (generation === catalogGeneration.current) setError(e.message); }
     finally { if (generation === catalogGeneration.current) setLoading(false); }
   }
+  function startSidebarSwipe(event) {
+    suppressSidebarClick.current = false;
+    if (!compactViewport || !mobileSidebarOpen || !event.isPrimary || event.button !== 0) return;
+    sidebarGesture.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, width: event.currentTarget.clientWidth, dragging: false };
+  }
+  function moveSidebarSwipe(event) {
+    const gesture = sidebarGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+    if (!gesture.dragging) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { sidebarGesture.current = null; return; }
+      if (dx >= -10 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+      gesture.dragging = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    const offset = Math.max(-gesture.width, Math.min(0, dx));
+    setSidebarDrag({ offset, progress: -offset / gesture.width });
+  }
+  function finishSidebarSwipe(event) {
+    const gesture = sidebarGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    sidebarGesture.current = null; setSidebarDrag(null);
+    if (!gesture.dragging) return;
+    suppressSidebarClick.current = true;
+    if (event.type !== 'pointercancel' && gesture.x - event.clientX >= Math.min(80, gesture.width * .25)) setMobileSidebarOpen(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
   function chooseDevice(id) {
     manualSelection.current = true;
     setMobileSidebarOpen(false);
@@ -157,7 +186,10 @@ function App() {
 
   return <div className="shell"><AppHeader/>
     <div className={`dashboard-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      <aside className={`device-sidebar ${mobileSidebarOpen ? 'open' : ''}`} id="device-sidebar" aria-label="Roku devices"><div className="device-sidebar-inner">
+      <aside className={`device-sidebar ${mobileSidebarOpen ? 'open' : ''}`} id="device-sidebar" aria-label="Roku devices"
+        style={sidebarDrag ? { transform: `translateX(${sidebarDrag.offset}px)`, transition: 'none' } : undefined}
+        onPointerDown={startSidebarSwipe} onPointerMove={moveSidebarSwipe} onPointerUp={finishSidebarSwipe} onPointerCancel={finishSidebarSwipe}
+        onClickCapture={event => { if (suppressSidebarClick.current) { event.preventDefault(); event.stopPropagation(); suppressSidebarClick.current = false; } }}><div className="device-sidebar-inner">
         <div className="device-sidebar-heading"><h2>Devices</h2><span>{String(devices.length).padStart(2, '0')}</span></div>
         <div className="device-list">{devices.map(d => {
           const connected = d.online && link === 'Connected';
@@ -168,7 +200,7 @@ function App() {
           </div>;
         })}</div>
       </div></aside>
-      {mobileSidebarOpen && <button className="device-sidebar-scrim" aria-label="Close devices" onClick={() => setMobileSidebarOpen(false)}/>}
+      {mobileSidebarOpen && <button className="device-sidebar-scrim" aria-label="Close devices" style={sidebarDrag ? { opacity: 1 - sidebarDrag.progress } : undefined} onClick={() => setMobileSidebarOpen(false)}/>}
       <main className="workspace dashboard-workspace"><div className="workspace-toolbar"><button className="sidebar-toggle" aria-controls="device-sidebar" aria-expanded={compactViewport ? mobileSidebarOpen : !sidebarCollapsed} aria-label={compactViewport ? mobileSidebarOpen ? 'Close devices' : 'Show devices' : sidebarCollapsed ? 'Show devices' : 'Collapse devices'} onClick={() => compactViewport ? setMobileSidebarOpen(open => !open) : setSidebarCollapsed(collapsed => !collapsed)}><Icon name="sidebar" size={21}/></button></div>
       {error && <div className="alert" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>×</button></div>}
       <div className="dashboard-content">

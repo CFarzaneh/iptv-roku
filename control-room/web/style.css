@@ -258,3 +258,5 @@ footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 2
 .device-settings form { width: 100%; max-width: 440px; }
 .device-settings .primary { align-self: flex-start; }
 .channel-pane .tabs button { flex-shrink: 0; }
+
+@media (max-width: 850px) { .device-sidebar { touch-action: pan-y pinch-zoom; } .device-sidebar-scrim { transition: opacity .3s ease; } }
