@@ -9,6 +9,11 @@ export class Relay {
   }
   changed() { this.version++; for (const wake of [...this.listeners]) wake(); }
   get(id) { const d = this.devices.get(id); requireThat(d?.enabled, 404, 'DEVICE_NOT_FOUND'); return d; }
+  rename(id, label) {
+    const device = this.get(id);
+    device.label = label; this.changed();
+    return { id, label };
+  }
   prune(d) {
     for (const c of d.commands) {
       if (c.expiresAt <= this.now()) {

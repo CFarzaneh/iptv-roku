@@ -1,6 +1,6 @@
 # IPTV control room — system design
 
-Updated October 4, 2026. This supersedes the Lightsail relay design. The CDK stack deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. Both personalized Rokus have authenticated, reported playback, and accepted dashboard commands on hardware.
+Updated October 9, 2026. This supersedes the Lightsail relay design. The CDK stack deploys Amplify Hosting, Cognito, the Lambda Function URL, and DynamoDB in `us-east-2`. Both personalized Rokus have authenticated, reported playback, and accepted dashboard commands on hardware.
 
 ## Accepted scope
 
@@ -27,7 +27,7 @@ The dashboard cannot open an inbound connection to a Roku behind a home router. 
 
 The CloudFormation stack is defined by AWS CDK in `control-room/infra`. It contains Amplify Hosting, a Cognito user pool/client/domain, one DynamoDB Standard table with PK/SK and TTL, one Node.js Lambda, a Function URL, a limited Lambda execution role, and a one-week CloudWatch log group. CDK bootstrap creates its asset-publishing resources through CloudFormation. No Lightsail container/VM, EC2, API Gateway, separately managed CloudFront, Route 53, ACM, RDS, ElastiCache, or Secrets Manager is part of this version. S3 release resources are deferred until software-update support.
 
-The table uses 25 provisioned RCU and 10 provisioned WCU. Its original 5/5 setting throttled reads with both Rokus and the dashboard active; CloudFormation raised capacity on October 4 without changing billing mode. It holds only the latest device snapshot, short-lived auth/session data, pending commands, and short-lived results. This is a database, but not a viewing-history or full-catalog database. There is no permanently stored IPTV provider password in AWS. A credential replacement does temporarily pass through Lambda and a DynamoDB command; that plaintext is removed after acknowledgment or expiry. DynamoDB TTL deletion can take days, so code must enforce deadlines and explicitly delete expired sensitive commands rather than trusting TTL alone. [DynamoDB TTL behavior](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html).
+The table uses 25 provisioned RCU and 10 provisioned WCU. Its original 5/5 setting throttled reads with both Rokus and the dashboard active; CloudFormation raised capacity on October 4 without changing billing mode. It holds the latest device snapshot, permanent dashboard device names, short-lived auth/session data, pending commands, and short-lived results. This is a database, but not a viewing-history or full-catalog database. There is no permanently stored IPTV provider password in AWS. A credential replacement does temporarily pass through Lambda and a DynamoDB command; that plaintext is removed after acknowledgment or expiry. DynamoDB TTL deletion can take days, so code must enforce deadlines and explicitly delete expired sensitive commands rather than trusting TTL alone. [DynamoDB TTL behavior](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html).
 
 ## Roku integration and sync
 
@@ -49,6 +49,8 @@ Commands include an ID, server-set deadline, app-session ID, source/catalog revi
 
 The website does not contact the IPTV provider. It asks the online Roku for categories or bounded channel pages through a temporary catalog command. Dashboard search matches channel names and exact stream IDs; Xtream search also matches provider EPG IDs. Xtream `stream_id` is the playback identity; M3U uses a unique `tvg-id` when safe, otherwise an opaque Roku mapping scoped to the catalog revision. Names, channel numbers, and EPG IDs are display/guide data, not tune IDs. Responses omit stream URLs, authorization headers, and credentials. Large results are paged and capped below DynamoDB’s item limit. Catalog data is not permanently imported into AWS.
 
+The Device settings tab lets the administrator rename either Roku, including an offline device. The authenticated `POST /devices/:id/settings` saves a trimmed name of 1–80 characters in the existing `DEVICE#<id>` / `STATE` DynamoDB item. This name has no TTL, overrides the original configured label in dashboard responses, and survives session renewal, new reports, and deployments. The immutable device ID still identifies its authorization and command mailbox. Renaming does not require another Roku sideload.
+
 The Roku reports current channel, player state, app/OS version, and available Video-node metrics. The dashboard displays decimal KB/MB and a labeled recent KB/s window. Missing diagnostics show unavailable rather than zero. Media counters are not complete home-network usage. No daily/monthly viewing history is stored.
 
 For provider changes, the authenticated browser submits the candidate URL/username/password over HTTPS. Lambda stores a short-lived command for the selected device. The Roku receives it on its next sync, validates against the provider from its own network, and saves it to its registry only after validation succeeds. The old credentials remain if validation fails. The command payload is deleted promptly after receipt/result and never returned to the browser. A fresh `--empty-provider` sideload contains no provider credentials, waits for dashboard provisioning without opening the Roku keyboard, and loads its first validated account automatically. Changes to an already configured account apply on the next IPTV-app launch. AWS can see the transient plaintext in this first version, so bodies, tokens, URLs, and passwords must not enter logs or traces. Never put credentials in S3 or Git.
@@ -68,7 +70,8 @@ The dashboard's Account panel uses Cognito's user-scoped API to request and veri
 | Provider credentials | Roku registry | Short-lived command payload during replacement only |
 | Full catalog and playback URL | Roku/provider | No durable cloud copy |
 | Favorites, recents, selected local release | Roku registry | No durable cloud copy |
-| Latest state, commands, results, challenges, sessions | DynamoDB | TTL and explicit application deadlines |
+| Dashboard device names | DynamoDB | Permanent `STATE.label`, no TTL |
+| Latest state, commands, results, challenges, sessions | DynamoDB | Latest snapshot plus temporary records with TTL and explicit application deadlines |
 | Approved future component releases | S3, later phase | No personalized credentials |
 
 TLS covers browser/Roku traffic to AWS. Lambda sees decrypted control payloads; this is not browser-to-Roku end-to-end encryption. Roku provider media encryption depends separately on each provider URL. IAM permits the API function to access only its mailbox table. Limit log retention and never log successful 2-second sync bodies.

@@ -69,6 +69,8 @@ Measure launch-to-browse, selection-to-playing, rebuffering, and live-edge delay
 
 The [system design](iptv-dashboard-system-design.md) now uses Amplify Hosting and Cognito for one browser administrator, a Node.js Lambda Function URL for the HTTPS API, and a small DynamoDB table for latest state and short-lived commands. This replaces the previous Lightsail container and 25-second long poll. CDK defines the stack and CloudFormation deploys it in `us-east-2`. No cloud video proxy, transcoder, or permanent catalog/history database is introduced. S3 software releases remain the last phase.
 
+The dashboard can rename either device from Device settings. The name is saved permanently in DynamoDB independently of Roku provider settings; stable device IDs continue to route commands and authenticate each TV. Renaming works offline and needs no app reinstall.
+
 The administrator can change their verified email and manage passkeys through the dashboard Account panel; password reset uses Cognito managed login. These changes keep the same Cognito `sub` and therefore the same access to both Rokus.
 
 `components/tasks/DashboardTask.brs` authenticates a personalized sideload using an installation secret and Roku device attestation, then makes a short asynchronous `/device/sync` roughly every two seconds while the IPTV app is active. `components/DashboardBridge.brs` keeps UI and Video-node changes on the SceneGraph side. A sync reports bounded telemetry/results and receives at most one remote command. The dashboard polls Lambda for state/results while visible. The Roku still fetches provider catalogs, resolves playback IDs, and tunes through the original `PlayerScreen` controller; AWS loss must not interrupt local playback.

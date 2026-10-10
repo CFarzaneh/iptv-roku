@@ -98,6 +98,8 @@ The current TV's favorites/recents recovery seed can be captured before replacin
 
 ## Runtime behavior
 
+- **Device settings → Device name → Save name** renames the selected Roku in the dashboard, including when it is offline. The administrator-only API stores `label` permanently on its existing DynamoDB `STATE` record. Device IDs, authorization, and provider credentials keep their existing identities; Roku reports and session renewal preserve the custom name.
+
 - Roku sends one short asynchronous `POST /device/sync` about every two seconds while the IPTV app is active. It carries a snapshot and queued acknowledgments and receives at most one command.
 - Browser polls current status/results while visible and slows down when hidden. Commands expire quickly and check source/catalog/playback revisions. The Roku deduplicates command IDs.
 - Xtream `stream_id` is retained. M3U `tvg-id` is used only when unique; otherwise the Roku provides a catalog-scoped local ID. The browser never receives credential-bearing stream URLs.

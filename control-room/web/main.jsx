@@ -182,17 +182,40 @@ function App() {
           ].map(([label, value, unit]) => <div className="dashboard-metric" key={label}><span>{label}</span><strong>{value}</strong><small>{unit}</small></div>)}</div>
         </section>
         <div className="channel-pane" key={`${device.id}-channels`}><div className="channel-pane-head"><h2>Channels</h2><span>{device.label}</span></div>
-        <div className="tabs"><button className={tab === 'channels' ? 'current' : ''} onClick={() => setTab('channels')}><Icon name="grid" size={17}/>Channels</button><button className={tab === 'settings' ? 'current' : ''} onClick={() => setTab('settings')}><Icon name="settings" size={17}/>Provider settings</button><button className={tab === 'health' ? 'current' : ''} onClick={() => setTab('health')}><Icon name="wave" size={17}/>Playback health</button></div>
+        <div className="tabs"><button className={tab === 'channels' ? 'current' : ''} onClick={() => setTab('channels')}><Icon name="grid" size={17}/>Channels</button><button className={tab === 'settings' ? 'current' : ''} onClick={() => setTab('settings')}><Icon name="settings" size={17}/>Provider settings</button><button className={tab === 'health' ? 'current' : ''} onClick={() => setTab('health')}><Icon name="wave" size={17}/>Playback health</button><button className={tab === 'device' ? 'current' : ''} onClick={() => setTab('device')}><Icon name="tv" size={17}/>Device settings</button></div>
         {notice && <div className="notice" role="status">{notice}</div>}
     {tab === 'channels' && <section className="panel catalog-panel"><div className="catalog-toolbar"><form className="search" onSubmit={e => { e.preventDefault(); loadCatalog('search'); }}><Icon name="search"/><input aria-label="Search channels by name or stream ID" placeholder="Channel name or stream ID…" value={query} onChange={e => setQuery(e.target.value)} disabled={!online}/><button disabled={!online || loading || !query.trim()}>Search</button></form><button className="secondary" disabled={!online || loading} onClick={() => loadCatalog()}><Icon name="refresh" size={16}/>Load categories</button></div>
     <div className="catalog"><nav className="categories" aria-label="Channel categories">{categories.length ? categories.map(c => <button key={c.id} className={category === c.id ? 'chosen' : ''} disabled={loading || !online} onClick={() => { setCategory(c.id); loadCatalog('channels', c.id); }}>{c.name}<Icon name="arrow" size={13}/></button>) : <p>Load categories to browse channels.</p>}</nav><div className="channel-list">{loading ? <div className="empty"><span className="loader"/><h3>Loading channels</h3><p>Reading the Roku provider catalog.</p></div> : page ? <><div className="list-caption"><span>{page.kind === 'search' ? 'SEARCH RESULTS' : 'CHANNELS'}</span><span>{page.total ?? page.channels?.length} {page.incomplete ? 'reported · partial catalog' : 'available'}</span></div>{page.channels?.length ? page.channels.map(ch => <button className="channel-row" key={ch.streamId} disabled={!online} onClick={() => tune(ch)}><span className="channel-avatar">{ch.name.slice(0, 2).toUpperCase()}</span><span><strong>{ch.name}</strong><small>{ch.group} · {ch.streamId}</small></span><span className="watch">{snapshot?.channel?.streamId === ch.streamId ? 'Playing' : 'Play'} <Icon name="arrow" size={14}/></span></button>) : <div className="empty"><h3>No channels found</h3><p>Try another category or search.</p></div>}<div className="pagination"><button disabled={!online || !page.offset} onClick={() => loadCatalog(page.kind, page.categoryId, Math.max(0, page.offset - 100))}>← Previous</button><button disabled={!online || page.offset + (page.channels?.length || 0) >= page.total} onClick={() => loadCatalog(page.kind, page.categoryId, page.offset + 100)}>Next →</button></div></> : <div className="empty"><Icon name="tv" size={34}/><h3>{online ? 'No channels loaded' : 'Device offline'}</h3><p>{online ? 'Load categories or search for a channel.' : 'Open the IPTV app on this Roku to browse channels.'}</p></div>}</div></div></section>}
     {tab === 'settings' && <section className="panel settings"><div><h3>Provider credentials</h3><p>Saved on {device.label} after validation.</p></div><form onSubmit={saveProvider}><label>Provider type<select name="providerType" value={providerType} onChange={e => setProviderType(e.target.value)}><option value="xtream">Xtream account</option><option value="m3u">M3U playlist</option></select></label><label>{providerType === 'm3u' ? 'Complete M3U playlist URL' : 'Server address'}<input required type="url" name="server" autoComplete="off" placeholder="https://…"/></label>{providerType === 'm3u' ? <p className="provider-hint">Use the complete playlist link supplied by your provider, including any credentials in the URL.</p> : <div className="form-row"><label>Username<input required name="username" autoComplete="off"/></label><label>Password<input required type="password" name="password" autoComplete="new-password"/></label></div>}<button className="primary" disabled={!online}>Validate and save on Roku <Icon name="arrow" size={16}/></button></form></section>}
+    {tab === 'device' && <DeviceSettings key={device.id} device={device} onSaved={updated => setDevices(current => current.map(d => d.id === updated.id ? { ...d, label: updated.label } : d))}/>}
     {tab === 'health' && <section className="panel health">{[['Startup time',`${number(metrics.startupMs)} ms`],['Buffering events',number(metrics.bufferingCount)],['Buffering time',`${number(metrics.bufferingMs,1000)} s`],['Installed app',snapshot?.appVersion || '—'],['Roku OS',snapshot?.osVersion || '—'],['Playback',stateName(snapshot?.state)]].map(([k,v]) => <div key={k}><span>{k}</span><strong>{v}</strong></div>)}</section>}
         </div>
       </div>
       <footer><span>Media counters exclude network overhead.</span></footer></main>
     </div>
   </div>;
+}
+function DeviceSettings({ device, onSaved }) {
+  const [name, setName] = useState(device.label), [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('');
+  useEffect(() => { if (!dirty) setName(device.label); }, [device.label, dirty]);
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true); setError(''); setMessage('');
+    try {
+      const updated = await auth.api(`/devices/${device.id}/settings`, { label: name.trim() });
+      onSaved(updated); setName(updated.label); setDirty(false); setMessage('Device name saved.');
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+  return <section className="panel settings device-settings">
+    <form onSubmit={save}>
+      <label>Device name<input value={name} required maxLength={80} autoComplete="off" disabled={saving} onChange={e => { setName(e.target.value); setDirty(true); setMessage(''); setError(''); }}/></label>
+      <button className="primary" disabled={saving || !name.trim() || name.trim() === device.label}>{saving ? 'Saving…' : 'Save name'}</button>
+      {message && <p role="status">{message}</p>}
+      {error && <div className="alert" role="alert">{error}</div>}
+    </form>
+  </section>;
 }
 function Brand() { return <div className="brand"><span className="brand-mark"><Icon name="tv" size={19}/></span><span>IPTV <strong>Player</strong></span></div>; }
 function AppHeader() {

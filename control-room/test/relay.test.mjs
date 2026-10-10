@@ -115,3 +115,26 @@ test('wrong developer claim fails without consuming a still-valid challenge', as
   const payload = { challengeId: c.challengeId, appSessionId: 'boot-1', attestation: JSON.stringify({ nonce: c.nonce, developerId: 'wrong', channelId: 'dev' }) };
   assert.equal((await call('POST', '/device/auth/session', secret, payload)).statusCode, 401);
 });
+
+test('admin can rename an offline device; invalid names and other identities are rejected', async t => {
+  const { app, call, token, advance } = await fixture(t);
+  advance(60001);
+  const renamed = await call('POST', '/devices/my-roku/settings', adminToken, { label: '  Living room 📺  ' });
+  assert.equal(renamed.statusCode, 200);
+  assert.deepEqual(renamed.json(), { id: 'my-roku', label: 'Living room 📺' });
+  let view = (await call('GET', '/devices')).json();
+  assert.equal(view.devices[0].label, 'Living room 📺');
+  assert.equal(view.devices[0].online, false);
+  assert.equal(view.devices[1].label, 'Dad’s Roku');
+  assert.equal(app.relay.get('my-roku').commands.length, 0);
+  for (const payload of [{label:''}, {label:'   '}, {label:'a'.repeat(81)}, {label:'TV\nRoom'}, {label:'Room',enabled:false}]) {
+    assert.equal((await call('POST', '/devices/my-roku/settings', adminToken, payload)).statusCode, 400);
+  }
+  assert.equal((await call('POST', '/devices/my-roku/settings', token, { label: 'Unauthorized' })).statusCode, 401);
+  assert.equal((await call('POST', '/devices/missing/settings', adminToken, { label: 'Room' })).statusCode, 404);
+  app.relay.get('dads-roku').enabled = false;
+  assert.equal((await call('POST', '/devices/dads-roku/settings', adminToken, { label: 'Room' })).statusCode, 404);
+  await call('POST', '/device/reports', token, { ...snap, label: 'Overwrite' });
+  view = (await call('GET', '/devices')).json();
+  assert.equal(view.devices[0].label, 'Living room 📺');
+});

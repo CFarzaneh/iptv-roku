@@ -86,6 +86,10 @@ export function createApp(config, verifiers, options = {}) {
     return { ok: true };
   });
   app.get('/devices', { preHandler: admin }, async () => relay.view());
+  app.post('/devices/:id/settings', { preHandler: admin }, async request => {
+    const { label } = schema.deviceSettings.parse(request.body);
+    return relay.rename(request.params.id, label);
+  });
   app.get('/events', { preHandler: admin }, async (request, reply) => {
     const cursor = z.string().max(100).optional().parse(request.query.cursor);
     const view = await relay.events(cursor, signalFor(request, reply));

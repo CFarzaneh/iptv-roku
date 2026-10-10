@@ -4,6 +4,9 @@ const text = z.string().max(200);
 const id = z.string().min(1).max(160);
 const revision = z.number().int().nonnegative();
 const metric = z.number().finite().nonnegative().nullable();
+export const deviceSettings = z.object({
+  label: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/),
+}).strict();
 export const source = {
   sourceRevision: id,
   catalogRevision: id,

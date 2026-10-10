@@ -78,6 +78,15 @@ export class DynamoRelay {
   async state(id) {
     return (await this.db.send(new GetCommand({ TableName: this.table, Key: key(id, 'STATE'), ConsistentRead: true }))).Item;
   }
+  async rename(id, label) {
+    this.get(id);
+    // STATE has no TTL. Targeted updates from Roku sync/session renewal preserve the name.
+    await this.db.send(new UpdateCommand({ TableName: this.table, Key: key(id, 'STATE'),
+      UpdateExpression: 'SET #label=:label',
+      ExpressionAttributeNames: { '#label': 'label' },
+      ExpressionAttributeValues: { ':label': label } }));
+    return { id, label };
+  }
   async items(id, prefix) {
     const response = await this.db.send(new QueryCommand({ TableName: this.table,
       KeyConditionExpression: 'PK=:pk AND begins_with(SK,:prefix)',
@@ -111,7 +120,7 @@ export class DynamoRelay {
       const results = (await this.items(d.id, 'RESULT#'))
         .filter(r => r.expiresAt > seconds(this.now()) && r.appSessionId === state?.appSessionId)
         .map(({ PK, SK, expiresAt, appSessionId, ...publicResult }) => publicResult);
-      return { id: d.id, label: d.label,
+      return { id: d.id, label: state?.label ?? d.label,
         online: Boolean(state?.lastSeenAt && this.now() - state.lastSeenAt < 15000),
         lastSeen: state?.lastSeenAt || null, snapshot: state?.snapshot || null, results };
     }));
