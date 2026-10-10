@@ -15,6 +15,9 @@ const Icon = ({ name, size = 20 }) => <svg width={size} height={size} viewBox="0
   sidebar: <><rect x="2.5" y="3.5" width="19" height="17" rx="2.5"/><path d="M9 3.5v17"/><path className="sidebar-chevron" d="m16.5 8.5-3.5 3.5 3.5 3.5"/></>,
 })[name]}</svg>;
 const number = (value, divisor = 1) => value == null ? '—' : (value / divisor).toLocaleString(undefined, { maximumFractionDigits: 1 });
+const mediaDownloaded = bytes => bytes == null ? '—' : bytes >= 1e9
+  ? `${(bytes / 1e9).toLocaleString(undefined, { maximumFractionDigits: 2 })} GB`
+  : `${number(bytes, 1e6)} MB`;
 const stateName = value => ({ idle: 'Idle', tuning: 'Tuning', playing: 'Playing', buffering: 'Buffering', paused: 'Paused', error: 'Playback error', stopped: 'Stopped' })[value] || 'Unknown';
 const lastReport = value => value ? `Last report: ${new Date(value).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` : 'No reports yet';
 
@@ -175,7 +178,7 @@ function App() {
           <div className="selected-device-stream"><span className="eyebrow">{online ? stateName(snapshot?.state).toUpperCase() : 'LAST CHANNEL'}</span><strong>{snapshot?.channel?.name || 'No active stream'}</strong><span className="stream-detail">{snapshot?.channel ? `${snapshot.channel.group} · Stream ID ${snapshot.channel.streamId}` : online ? 'Select a channel to begin playback.' : 'Open the IPTV app on this Roku to reconnect.'}</span></div>
           <div className="selected-device-report"><span>Last report</span><strong>{device.lastSeen ? new Date(device.lastSeen).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'No reports yet'}</strong></div>
           <div className="dashboard-metrics" aria-label="Playback metrics">{[
-            ['Media downloaded', metrics.sessionBytes == null ? '—' : `${number(metrics.sessionBytes, 1e6)} MB`, 'this app session'],
+            ['Media downloaded', mediaDownloaded(metrics.sessionBytes), 'this app session'],
             ['Download rate', metrics.bytesPerSecond == null ? '—' : `${number(metrics.bytesPerSecond, 1000)} KB/s`, '5-second window'],
             ['Stream bitrate', metrics.bitrate == null ? '—' : `${number(metrics.bitrate, 1e6)} Mb/s`, ''],
             ['Resolution', metrics.width && metrics.height ? `${metrics.width} × ${metrics.height}` : '—', ''],
