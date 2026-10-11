@@ -3,6 +3,7 @@ sub startDashboard()
     if m.dashboardTask <> invalid then return
     if not CreateObject("roFileSystem").Exists("pkg:/source/dashboard.json") then return
     m.dashboardSession = dashboardUuid()
+    m.dashboardOsVersion = dashboardFormatOSVersion(CreateObject("roDeviceInfo").GetOSVersion())
     m.dashboardSourceRevision = dashboardUuid()
     m.dashboardCatalogRevision = dashboardUuid()
     m.dashboardKnownChannels = {}
@@ -63,7 +64,7 @@ sub publishDashboardSnapshot()
         channel: playback.channel,
         metrics: playback.metrics,
         appVersion: CreateObject("roAppInfo").GetVersion(),
-        osVersion: CreateObject("roDeviceInfo").GetVersion(),
+        osVersion: m.dashboardOsVersion,
         provider: { type: providerType, configured: providerType <> "none" }
     }
 end sub

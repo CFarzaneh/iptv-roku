@@ -12,7 +12,9 @@ sub initDashboardTelemetry()
     m.dashboardBufferCount = 0
     m.dashboardCommand = ""
     m.dashboardLastSegment = ""
+    m.dashboardPlayingSegmentKnown = false
     m.video.observeField("downloadedSegment", "onDashboardSegment")
+    m.video.observeField("streamingSegment", "onDashboardStreamingSegment")
     m.top.findNode("telemetryTimer").observeField("fire", "onDashboardTelemetryTick")
     m.top.findNode("telemetryTimer").control = "start"
 end sub
@@ -30,6 +32,7 @@ sub dashboardBeginTune(channel as object)
     m.dashboardBufferMs = 0
     m.dashboardBufferCount = 0
     m.dashboardLastSegment = ""
+    m.dashboardPlayingSegmentKnown = false
     m.dashboardCurrent = dashboardChannel(channel)
     publishPlayerTelemetry("tuning")
 end sub
@@ -50,7 +53,10 @@ end sub
 
 sub onDashboardSegment(event as object)
     segment = event.GetData()
-    if segment = invalid then return
+    if GetInterface(segment, "ifAssociativeArray") = invalid then return
+    ' Quality metadata is useful even when the byte-count fields are missing.
+    ' Prefer the currently playing representation over one downloaded ahead.
+    if segment.Status = 0 and not m.dashboardPlayingSegmentKnown then dashboardApplyVideoMetrics(segment)
     if segment.Status <> 0 or segment.SegSize = invalid then return
     key = dashboardText(segment.Path) + "|" + dashboardText(segment.SegSequence) + "|" + dashboardText(segment.SegType)
     if key = m.dashboardLastSegment then return
@@ -59,9 +65,22 @@ sub onDashboardSegment(event as object)
     m.dashboardSessionBytes = m.dashboardSessionBytes + segment.SegSize
     m.dashboardTuneBytes = m.dashboardTuneBytes + segment.SegSize
     m.dashboardRateBytes = m.dashboardRateBytes + segment.SegSize
-    if segment.BitrateBPS <> invalid then m.dashboardMetric.bitrate = segment.BitrateBPS
-    if segment.Width <> invalid and segment.Width > 0 then m.dashboardMetric.width = segment.Width
-    if segment.Height <> invalid and segment.Height > 0 then m.dashboardMetric.height = segment.Height
+end sub
+
+sub onDashboardStreamingSegment(event as object)
+    segment = event.GetData()
+    quality = dashboardVideoMetrics(segment)
+    if quality.width <> invalid then m.dashboardPlayingSegmentKnown = true
+    dashboardApplyVideoMetrics(segment)
+end sub
+
+sub dashboardApplyVideoMetrics(segment as dynamic)
+    quality = dashboardVideoMetrics(segment)
+    if quality.width <> invalid
+        m.dashboardMetric.width = quality.width
+        m.dashboardMetric.height = quality.height
+    end if
+    if quality.bitrate <> invalid then m.dashboardMetric.bitrate = quality.bitrate
 end sub
 
 sub onDashboardTelemetryTick()
