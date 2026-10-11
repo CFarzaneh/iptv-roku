@@ -43,7 +43,9 @@ export const snapshot = z.object({
 export const result = z.object({
   commandId: id,
   status: z.enum(['received', 'tuning', 'playing', 'saved', 'ok', 'failed', 'stale']),
-  code: z.enum(['NONE', 'UNAVAILABLE', 'STALE', 'INVALID_CHANNEL', 'PROVIDER_ERROR', 'SAVE_FAILED', 'PLAYBACK_ERROR']).default('NONE'),
+  code: z.enum(['NONE', 'UNAVAILABLE', 'STALE', 'INVALID_CHANNEL', 'PROVIDER_ERROR',
+    'PROVIDER_CONNECTION_FAILED', 'PROVIDER_ACCESS_DENIED', 'PROVIDER_ACCOUNT_REJECTED',
+    'PROVIDER_ACCOUNT_INACTIVE', 'PROVIDER_BAD_RESPONSE', 'SAVE_FAILED', 'PLAYBACK_ERROR']).default('NONE'),
   data: z.object({
     ...source,
     categories: z.array(z.object({ id: text, name: text })).max(2000).optional(),

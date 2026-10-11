@@ -88,10 +88,10 @@ pnpm build
 AWS_PROFILE=cam node scripts/publish-dashboard.mjs
 python3 ../tools/package_personalized.py my-roku \
   --dashboard .private/my-roku/dashboard.json --provider-config ../config.json \
-  --output ../builds/my-roku-v1.0.26.zip
+  --output ../builds/my-roku-v1.0.27.zip
 python3 ../tools/package_personalized.py dads-roku \
   --dashboard .private/dads-roku/dashboard.json --empty-provider \
-  --output ../builds/dads-roku-v1.0.26.zip
+  --output ../builds/dads-roku-v1.0.27.zip
 ```
 
 The current TV's favorites/recents recovery seed can be captured before replacing its sideload. From a computer on the same LAN, run `python3 ../tools/backup_roku_store.py ROKU_LAN_IP`; it uses Roku's read-only developer-mode `query/registry/dev` endpoint and saves only validated lists and the developer ID under ignored `backups/`. Roku may require **Settings → System → Advanced system settings → Control by mobile apps → Enabled** for this endpoint. If Dad is replacing an existing sideload, capture his Roku's store separately from his home network. The owner elected to build My Roku's October 3 package without a restore seed; a sideload failure or registry reset could erase favorites and recents. The earlier v1.0.20 ZIP remains untouched. Private ZIPs contain provider settings or installation secrets and stay under ignored `builds/`.
@@ -111,6 +111,7 @@ The current TV's favorites/recents recovery seed can be captured before replacin
 - DynamoDB TTL cleanup is asynchronous. Every read also checks the logical deadline, and expired sensitive commands are explicitly deleted. The table does not hold viewing history or a full catalog.
 - Session/media counters come from reported player data, not a network proxy. Missing metrics display unavailable. Cloud failures cannot interrupt direct local playback.
 - Roku v1.0.26 reports OS version through `GetOSVersion()` as `major.minor.revision (build n)`. Resolution prefers the currently playing `streamingSegment` and falls back to successful `downloadedSegment` picture metadata; audio/caption segments cannot replace video quality. Dimensions reset on each channel change, and unknown resolution remains blank rather than using the TV's display size. The dashboard labels 720/1080-line sources as 720p/1080p, 1440-line sources as 2K, and 3840/4096 × 2160 sources as 4K. Both native metadata fields depend on HLS/DASH reporting; streams that omit dimensions still require hardware investigation. These changes add no network requests or cloud capacity.
+- Roku v1.0.27 makes provider validation use the same User-Agent and certificate initialization as its catalog requests. Validation returns only fixed failure codes distinguishing connection failure, HTTP access denial, explicit account rejection, inactive account, and unexpected response. The dashboard shows the corresponding action; local Roku diagnostics log only the numeric HTTP status and fixed code. Provider bodies, account details, and credential-bearing URLs are never included in these diagnostics. Deploy the API schema before installing this Roku build. Older builds still return the generic `PROVIDER_ERROR` code.
 - A Lambda Function URL terminates public HTTPS. Application code verifies Cognito access JWTs for browser requests and a short-lived attested device session for Roku requests.
 - The Function URL is the sole production CORS layer. The browser trims its trailing API URL slash before joining route paths; local Fastify runs may enable their own CORS handler.
 

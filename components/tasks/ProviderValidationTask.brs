@@ -5,9 +5,9 @@ end sub
 sub validateProvider()
     candidate = m.top.candidate
     req = CreateObject("roUrlTransfer")
-    server = dashboardText(candidate.server)
+    server = dashboardText(candidate.server).Trim()
     if not server.StartsWith("https://") and not server.StartsWith("http://")
-        m.top.result = { ok: false }
+        m.top.result = { ok: false, code: "PROVIDER_ERROR" }
         return
     end if
     while server.EndsWith("/")
@@ -21,33 +21,25 @@ sub validateProvider()
     req.SetMessagePort(port)
     req.SetUrl(url)
     req.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    req.InitClientCertificates()
     req.EnablePeerVerification(true)
     req.EnableHostVerification(true)
     req.EnableEncodings(true)
+    ' Match catalog and playback requests; some providers reject default clients.
+    req.AddHeader("User-Agent", "Mozilla/5.0")
     if not req.AsyncGetToString()
-        m.top.result = { ok: false }
+        m.top.result = { ok: false, code: "PROVIDER_CONNECTION_FAILED" }
         return
     end if
     ev = wait(30000, port)
     if type(ev) <> "roUrlEvent"
         req.AsyncCancel()
-        m.top.result = { ok: false }
+        m.top.result = { ok: false, code: "PROVIDER_CONNECTION_FAILED" }
         return
     end if
-    if ev.GetResponseCode() <> 200 or ev.GetString().Len() > 20000000
-        m.top.result = { ok: false }
-        return
-    end if
-    body = ev.GetString()
-    ok = false
-    if candidate.providerType = "xtream"
-        data = ParseJson(body)
-        if data <> invalid and data.user_info <> invalid
-            ok = (dashboardText(data.user_info.auth) = "1" and LCase(dashboardText(data.user_info.status)) = "active")
-        end if
-    else
-        parsed = ParseM3U(body)
-        ok = (parsed.channels.Count() > 0)
-    end if
-    m.top.result = { ok: ok }
+    httpCode = ev.GetResponseCode()
+    code = providerValidationCode(httpCode, ev.GetString(), candidate.providerType)
+    ' Local diagnostic includes no URL, username, password or server error body.
+    print "CONTROL_ROOM provider validation HTTP " + httpCode.ToStr() + " " + code
+    m.top.result = { ok: code = "NONE", code: code }
 end sub

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as auth from './auth';
 import { resolutionLabel, rokuOSLabel } from './telemetry.mjs';
+import { providerErrorMessage } from './provider.mjs';
 import './style.css';
 
 const Icon = ({ name, size = 20 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{({
@@ -174,11 +175,7 @@ function App() {
     try { await request('provider-config', values); form.reset(); setProviderType('xtream'); setNotice(wasConfigured ? 'Provider settings saved. Reopen the IPTV app to use them.' : 'Provider settings saved. Channels will load on the Roku shortly.'); }
     catch (e) {
       setNotice('');
-      setError(e.code === 'PROVIDER_ERROR'
-        ? values.providerType === 'm3u'
-          ? 'The Roku could not load channels from this playlist URL. Enter the complete M3U URL.'
-          : 'The Roku could not validate this account. Check the server address, username, and password.'
-        : e.message);
+      setError(providerErrorMessage(e.code, values.providerType) || e.message);
     }
   }
   if (!ready || (signedIn && !devicesLoaded)) return <div className="entry"><Brand/><p role="status">Loading…</p>{error && <div className="alert" role="alert">{error}</div>}</div>;

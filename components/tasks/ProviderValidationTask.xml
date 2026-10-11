@@ -2,6 +2,7 @@
 <component name="ProviderValidationTask" extends="Task">
   <script type="text/brightscript" uri="pkg:/source/DashboardModel.brs"/>
   <script type="text/brightscript" uri="pkg:/source/M3uParser.brs"/>
+  <script type="text/brightscript" uri="pkg:/source/ProviderValidation.brs"/>
   <script type="text/brightscript" uri="pkg:/components/tasks/ProviderValidationTask.brs"/>
   <interface>
     <field id="candidate" type="assocarray"/>

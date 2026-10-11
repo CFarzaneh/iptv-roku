@@ -53,6 +53,16 @@ test('credential payload never appears in snapshots and is discarded after recei
   await call('POST', '/device/results', token, { commandId: accepted.commandId, status: 'received' });
   assert.equal(app.relay.get('my-roku').commands[0].payload, undefined);
 });
+test('provider failure reason reaches the administrator without account details', async t => {
+  const { call, token } = await fixture(t);
+  const accepted = (await call('POST', '/devices/my-roku/provider-config', adminToken,
+    { requestId: 'provider-denied', providerType: 'xtream', server: 'https://provider.example', username: 'owner', password: 'private-password' })).json();
+  assert.equal((await call('POST', '/device/results', token, { commandId: accepted.commandId,
+    status: 'failed', code: 'PROVIDER_ACCESS_DENIED', password: 'private-password', body: 'private-body' })).statusCode, 200);
+  const response = await call('GET', '/devices');
+  assert.equal(response.json().devices[0].results[0].code, 'PROVIDER_ACCESS_DENIED');
+  assert.ok(!response.body.includes('private-password') && !response.body.includes('private-body'));
+});
 test('attestation challenge cannot be reused, including concurrent submissions', async t => {
   const { call } = await fixture(t);
   const c = (await call('POST', '/device/auth/challenge', secret)).json();

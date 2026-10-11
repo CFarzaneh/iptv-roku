@@ -275,7 +275,7 @@ sub onDashboardProviderValidated()
     m.dashboardValidation = invalid
     m.dashboardProviderCommand = invalid
     if not task.result.ok
-        dashboardReply(command, "failed", "PROVIDER_ERROR")
+        dashboardReply(command, "failed", task.result.code)
         return
     end if
     if command.expiresAt <= dashboardNow()
