@@ -24,10 +24,20 @@ function dashboardFormatOSVersion(version as dynamic) as string
     return result
 end function
 
+function dashboardNumericValue(value as dynamic) as dynamic
+    ' SDK/SceneGraph values may be boxed (including roInteger). Numeric
+    ' interfaces cover both boxed and intrinsic values without a type-name list.
+    if GetInterface(value, "ifInt") <> invalid then return value.GetInt()
+    if GetInterface(value, "ifLongInt") <> invalid then return value.GetLongInt()
+    if GetInterface(value, "ifFloat") <> invalid then return value.GetFloat()
+    if GetInterface(value, "ifDouble") <> invalid then return value.GetDouble()
+    return invalid
+end function
+
 function dashboardPositiveNumber(value as dynamic) as boolean
-    valueType = LCase(Type(value))
-    if valueType <> "integer" and valueType <> "roint" and valueType <> "longinteger" and valueType <> "rolonginteger" and valueType <> "float" and valueType <> "rofloat" and valueType <> "double" and valueType <> "rodouble" then return false
-    return value > 0
+    number = dashboardNumericValue(value)
+    if number = invalid then return false
+    return number > 0
 end function
 
 ' Only video or mux metadata describes picture quality. Audio/caption events
@@ -35,19 +45,21 @@ end function
 function dashboardVideoMetrics(segment as dynamic) as object
     result = {}
     if GetInterface(segment, "ifAssociativeArray") = invalid then return result
-    if segment.segType = 1 or segment.segType = 3 then return result
-    if segment.segType <> invalid and segment.segType <> 0 and segment.segType <> 2 then return result
-    width = segment.width
-    height = segment.height
+    kind = dashboardNumericValue(segment.segType)
+    if segment.segType <> invalid and kind = invalid then return result
+    if kind = 1 or kind = 3 then return result
+    if kind <> invalid and kind <> 0 and kind <> 2 then return result
+    width = dashboardNumericValue(segment.width)
+    height = dashboardNumericValue(segment.height)
     if dashboardPositiveNumber(width) and dashboardPositiveNumber(height)
         if width <= 16384 and height <= 16384 and Fix(width) = width and Fix(height) = height
-            result.width = width
-            result.height = height
+            result.width = Fix(width)
+            result.height = Fix(height)
         end if
     end if
-    bitrate = segment.segBitrateBps
-    if not dashboardPositiveNumber(bitrate) then bitrate = segment.bitrateBps
-    if dashboardPositiveNumber(bitrate) then result.bitrate = bitrate
+    bitrate = dashboardNumericValue(segment.segBitrateBps)
+    if not dashboardPositiveNumber(bitrate) then bitrate = dashboardNumericValue(segment.bitrateBps)
+    if dashboardPositiveNumber(bitrate) then result.bitrate = bitrate * 1#
     return result
 end function
 

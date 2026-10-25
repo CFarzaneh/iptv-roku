@@ -5,6 +5,18 @@ sub main()
     check(dashboardFormatOSVersion(invalid) = "", "missing OS version")
     check(dashboardFormatOSVersion({major: "bad", minor: "3"}) = "", "malformed OS version")
 
+    boxedWidth = CreateObject("roInt")
+    boxedWidth.SetInt(1920)
+    boxedHeight = CreateObject("roInt")
+    boxedHeight.SetInt(1080)
+    boxedKind = CreateObject("roInt")
+    boxedKind.SetInt(0)
+    check(dashboardPositiveNumber(boxedWidth), "boxed SDK dimensions accepted")
+    boxedQuality = dashboardVideoMetrics({segType: boxedKind, width: boxedWidth, height: boxedHeight})
+    check(boxedQuality.width = 1920 and boxedQuality.height = 1080, "boxed dimensions normalized")
+    check(Type(boxedQuality.width) = "Integer" and Type(boxedQuality.height) = "Integer", "JSON gets intrinsic dimensions")
+    check(not dashboardPositiveNumber("1920") and not dashboardPositiveNumber(true) and not dashboardPositiveNumber(invalid), "non-numeric metadata remains rejected")
+
     m.dashboardMetric = dashboardEmptyMetrics()
     dashboardApplyVideoMetrics({segType: 2, width: 1280, height: 720, segBitrateBps: 3000000})
     check(m.dashboardMetric.width = 1280 and m.dashboardMetric.height = 720, "playing segment resolution")
@@ -53,6 +65,12 @@ sub main()
     check(m.top.dashboardCommandId = "next-remote-tune", "recovery cannot consume a newer command")
     dashboardBeginTune({providerStreamId: "456"})
     check(m.dashboardCommand = "next-remote-tune", "manual tune consumes its own command")
+    m.video = {state: "playing", streamingSegment: {segType: 0, width: boxedWidth, height: boxedHeight}}
+    m.errorDialog = {visible: false}
+    m.dashboardMetric = dashboardEmptyMetrics()
+    m.dashboardBytesKnown = false
+    onDashboardTelemetryTick()
+    check(m.dashboardMetric.width = 1920 and m.dashboardMetric.height = 1080, "timer recovers dimensions when an observer callback was missed")
     print "Dashboard telemetry checks passed"
 end sub
 

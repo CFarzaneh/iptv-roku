@@ -13,6 +13,7 @@ sub initDashboardTelemetry()
     m.dashboardCommand = ""
     m.dashboardLastSegment = ""
     m.dashboardPlayingSegmentKnown = false
+    m.dashboardDimensionReports = {}
     m.video.observeField("downloadedSegment", "onDashboardSegment")
     m.video.observeField("streamingSegment", "onDashboardStreamingSegment")
     m.top.findNode("telemetryTimer").observeField("fire", "onDashboardTelemetryTick")
@@ -35,6 +36,7 @@ sub dashboardBeginTune(channel as object, preserveCommand = false as boolean)
     m.dashboardBufferCount = 0
     m.dashboardLastSegment = ""
     m.dashboardPlayingSegmentKnown = false
+    m.dashboardDimensionReports = {}
     m.dashboardCurrent = dashboardChannel(channel)
     publishPlayerTelemetry("tuning")
 end sub
@@ -57,6 +59,7 @@ end sub
 sub onDashboardSegment(event as object)
     segment = event.GetData()
     if GetInterface(segment, "ifAssociativeArray") = invalid then return
+    dashboardLogDimensions(segment, "downloaded")
     ' Quality metadata is useful even when the byte-count fields are missing.
     ' Prefer the currently playing representation over one downloaded ahead.
     if segment.Status = 0 and not m.dashboardPlayingSegmentKnown then dashboardApplyVideoMetrics(segment)
@@ -72,6 +75,7 @@ end sub
 
 sub onDashboardStreamingSegment(event as object)
     segment = event.GetData()
+    dashboardLogDimensions(segment, "playing")
     quality = dashboardVideoMetrics(segment)
     if quality.width <> invalid then m.dashboardPlayingSegmentKnown = true
     dashboardApplyVideoMetrics(segment)
@@ -87,6 +91,13 @@ sub dashboardApplyVideoMetrics(segment as dynamic)
 end sub
 
 sub onDashboardTelemetryTick()
+    if m.video.state = "playing" or m.video.state = "paused"
+        segment = m.video.streamingSegment
+        dashboardLogDimensions(segment, "playing")
+        quality = dashboardVideoMetrics(segment)
+        if quality.width <> invalid then m.dashboardPlayingSegmentKnown = true
+        dashboardApplyVideoMetrics(segment)
+    end if
     elapsed = (Uptime(0) - m.dashboardRateStarted) * 1000.0
     if elapsed >= 1000 and m.dashboardBytesKnown
         m.dashboardMetric.bytesPerSecond = m.dashboardRateBytes * 1000.0 / elapsed
@@ -97,6 +108,32 @@ sub onDashboardTelemetryTick()
     if m.recovery <> invalid and m.recovery.pending then state = "buffering"
     if m.errorDialog <> invalid and m.errorDialog.visible then state = "error"
     publishPlayerTelemetry(state)
+end sub
+
+' At most two records per source/tune: first missing report, then a usable pair.
+' Never print the metadata object: it contains credential-bearing segment URLs.
+sub dashboardLogDimensions(segment as dynamic, source as string)
+    width = invalid
+    height = invalid
+    kind = invalid
+    if GetInterface(segment, "ifAssociativeArray") <> invalid
+        width = segment.width
+        height = segment.height
+        kind = segment.segType
+    end if
+    label = "missing"
+    if dashboardPositiveNumber(width) and dashboardPositiveNumber(height) then label = "reported"
+    key = source + "|" + label
+    if m.dashboardDimensionReports = invalid then m.dashboardDimensionReports = {}
+    if m.dashboardDimensionReports.DoesExist(key) then return
+    m.dashboardDimensionReports[key] = true
+    widthText = "missing"
+    heightText = "missing"
+    if dashboardPositiveNumber(width) then widthText = dashboardNumericValue(width).ToStr()
+    if dashboardPositiveNumber(height) then heightText = dashboardNumericValue(height).ToStr()
+    kindText = "missing"
+    if GetInterface(kind, "ifInt") <> invalid then kindText = kind.GetInt().ToStr()
+    print "[MEDIA] dimensions source="; source; " kind="; kindText; " width="; widthText; " widthType="; Type(width); " height="; heightText; " heightType="; Type(height)
 end sub
 
 sub publishPlayerTelemetry(state as string)
