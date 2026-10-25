@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as auth from './auth';
-import { resolutionLabel, rokuOSLabel } from './telemetry.mjs';
+import { rokuOSLabel } from './telemetry.mjs';
+import { ResolutionBadge } from './ResolutionBadge';
 import { providerErrorMessage } from './provider.mjs';
 import './style.css';
 
@@ -211,7 +212,7 @@ function App() {
             ['Media downloaded', mediaDownloaded(metrics.sessionBytes), 'this app session'],
             ['Download rate', metrics.bytesPerSecond == null ? '—' : `${number(metrics.bytesPerSecond, 1000)} KB/s`, '5-second window'],
             ['Stream bitrate', metrics.bitrate == null ? '—' : `${number(metrics.bitrate, 1e6)} Mb/s`, ''],
-            ['Resolution', resolutionLabel(metrics.width, metrics.height), ''],
+            ['Resolution', <ResolutionBadge width={metrics.width} height={metrics.height}/>, ''],
           ].map(([label, value, unit]) => <div className="dashboard-metric" key={label}><span>{label}</span><strong>{value}</strong><small>{unit}</small></div>)}</div>
         </section>
         <div className="channel-pane" key={`${device.id}-channels`}><div className="channel-pane-head"><h2>Channels</h2></div>
