@@ -1,7 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="68" height="64" viewBox="0 0 17 16" role="img" aria-label="2K video quality">
   <title>2K video quality badge</title>
-  <rect x="0" y="2" width="17" height="12" rx="2" fill="#ffa21f"/>
-  <g fill="#ffffff" transform="matrix(0.00467105 0 0 -0.00467105 1.69894737 11.55000000)">
+  <defs>
+    <mask id="quality-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="17" height="16" mask-type="luminance">
+      <rect width="17" height="16" fill="#ffffff"/>
+  <g fill="#000000" transform="matrix(0.00467105 0 0 -0.00467105 1.69894737 11.55000000)">
     <path transform="translate(0,0)" d="M531 283H1122V0H146V283L636 764Q702 830 733.5 893.0Q765 956 765 1024Q765 1129 701.5 1193.0Q638 1257 533 1257Q452 1257 355.5 1218.5Q259 1180 149 1104V1432Q266 1475 380.5 1497.5Q495 1520 605 1520Q846 1520 979.5 1402.0Q1113 1284 1113 1073Q1113 951 1056.5 845.5Q1000 740 818 563Z"/><path transform="translate(1282,0)" d="M169 1493H516V948L1015 1493H1418L770 786L1484 0H1050L516 588V0H169Z"/>
   </g>
+    </mask>
+  </defs>
+  <rect x="0" y="2" width="17" height="12" rx="2" fill="#f5f5f7" mask="url(#quality-cutout)"/>
 </svg>
