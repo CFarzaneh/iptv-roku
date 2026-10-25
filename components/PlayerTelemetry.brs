@@ -19,10 +19,12 @@ sub initDashboardTelemetry()
     m.top.findNode("telemetryTimer").control = "start"
 end sub
 
-sub dashboardBeginTune(channel as object)
+sub dashboardBeginTune(channel as object, preserveCommand = false as boolean)
     m.dashboardRevision = m.dashboardRevision + 1
-    m.dashboardCommand = m.top.dashboardCommandId
-    m.top.dashboardCommandId = ""
+    if not preserveCommand
+        m.dashboardCommand = m.top.dashboardCommandId
+        m.top.dashboardCommandId = ""
+    end if
     m.dashboardTuneBytes = 0.0
     m.dashboardMetric = dashboardEmptyMetrics()
     m.dashboardTuneStarted = Uptime(0)
@@ -37,8 +39,9 @@ sub dashboardBeginTune(channel as object)
     publishPlayerTelemetry("tuning")
 end sub
 
-sub dashboardObserveState()
+sub dashboardObserveState(stateOverride = "" as string)
     state = m.video.state
+    if stateOverride <> "" then state = stateOverride
     elapsed = (Uptime(0) - m.dashboardTuneStarted) * 1000.0
     if state = "buffering" and m.dashboardBufferStart < 0
         m.dashboardBufferStart = elapsed
@@ -90,7 +93,10 @@ sub onDashboardTelemetryTick()
         m.dashboardRateBytes = 0.0
         m.dashboardRateStarted = Uptime(0)
     end if
-    publishPlayerTelemetry(m.video.state)
+    state = m.video.state
+    if m.recovery <> invalid and m.recovery.pending then state = "buffering"
+    if m.errorDialog <> invalid and m.errorDialog.visible then state = "error"
+    publishPlayerTelemetry(state)
 end sub
 
 sub publishPlayerTelemetry(state as string)

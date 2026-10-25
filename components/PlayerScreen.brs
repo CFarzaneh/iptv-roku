@@ -82,6 +82,7 @@ sub init()
     m.audioRepairPort = 8765
     m.audioRepairSession = 0
     initDashboardTelemetry()
+    initPlaybackRecovery()
 end sub
 
 sub addErrorOption(parent as object, title as string)
@@ -96,15 +97,16 @@ sub onPlayCommand()
     playIndex(idx)
 end sub
 
-sub playIndex(idx as integer)
+sub playIndex(idx as integer, automaticRetry = false as boolean)
     if m.top.playlist = invalid or m.top.playlist.Count() = 0 return
     if idx < 0 or idx >= m.top.playlist.Count() return
     
+    beginPlaybackRecovery(automaticRetry)
     m.currentIndex = idx
     channel = m.top.playlist[idx]
-    dashboardBeginTune(channel)
+    dashboardBeginTune(channel, automaticRetry)
     
-    if not IsAdultGroup(channel.group)
+    if not automaticRetry and not IsAdultGroup(channel.group)
         PushRecent(channel.name)
     end if
     
@@ -116,10 +118,11 @@ sub playIndex(idx as integer)
     ' not change the state -- so the caption kept naming the previous channel during a
     ' fast surf. Same class as the Settings action field that only fired once.
     m.loadingLabel.text = "Loading: " + channel.name
+    if automaticRetry then m.loadingLabel.text = "Reconnecting…"
 
-    showMiniBanner(channel)
+    if not automaticRetry then showMiniBanner(channel)
     updateOverlayData(channel)
-    focusPlayer()
+    if not automaticRetry or not m.zapperPanel.visible then focusPlayer()
 
     key = audioRepairKey(channel)
     if key <> "" and m.audioRepairKnown.DoesExist(key)
@@ -157,6 +160,12 @@ end sub
 
 sub onVideoStateChange()
     state = m.video.state
+    if m.recovery = invalid then return
+    if not m.recovery.active
+        if state = "stopped" and not m.errorDialog.visible then dashboardObserveState()
+        return
+    end if
+    recoveryObserve(m.recovery, state, m.video.position, Uptime(0), recoveryPlaybackMarker())
     if state = "buffering"
         m.spinner.visible = true
         m.spinnerAnim.control = "start"
@@ -170,6 +179,7 @@ sub onVideoStateChange()
         else
             m.loadingLabel.text = "Loading…"
         end if
+        if m.recovery.pending or m.recovery.attempts > 0 then m.loadingLabel.text = "Reconnecting…"
     else if state = "playing"
         m.spinner.visible = false
         m.spinnerAnim.control = "stop"
@@ -188,7 +198,20 @@ sub onVideoStateChange()
             return
         end if
         m.lastPlaybackError = playbackErrorText()
-        showErrorDialog()
+        if recoverPlaybackError()
+            dashboardObserveState("buffering")
+        else
+            failPlaybackRecovery()
+        end if
+        return
+    else if state = "finished"
+        m.lastPlaybackError = "The live stream ended unexpectedly."
+        if queuePlaybackRecovery(3, "live-end")
+            dashboardObserveState("buffering")
+        else
+            failPlaybackRecovery()
+        end if
+        return
     end if
     dashboardObserveState()
 end sub
@@ -242,6 +265,7 @@ sub startAudioRepair(idx as integer)
 
     m.audioRepairPendingIndex = idx
     m.audioRepairActive = true
+    recoveryBeginAttempt(m.recovery, Uptime(0))
     m.video.control = "stop"
     m.errorDialog.visible = false
     m.spinner.visible = true
@@ -264,22 +288,20 @@ end sub
 
 sub onAudioRepairStatus()
     if m.audioRepairTask = invalid then return
+    if not m.recovery.active then return
     if m.audioRepairTask.status = "ready"
         print "[MEDIA] local audio repair ready"
         playPendingAudioRepair()
     else if m.audioRepairTask.status = "error"
         print "[MEDIA] local audio repair could not start"
         m.audioRepairPendingIndex = -1
-        m.spinner.visible = false
-        m.spinnerAnim.control = "stop"
-        m.loadingLabel.visible = false
         m.lastPlaybackError = "Roku could not start the on-device audio repair."
-        publishPlayerTelemetry("error")
-        showErrorDialog()
+        failPlaybackRecovery()
     end if
 end sub
 
 sub playPendingAudioRepair()
+    if not m.recovery.active then return
     idx = m.audioRepairPendingIndex
     if idx < 0 or idx <> m.currentIndex then return
     if m.top.playlist = invalid or idx >= m.top.playlist.Count() then return
@@ -604,6 +626,7 @@ sub zap(stepDelta as integer)
 end sub
 
 sub exitPlayer()
+    cancelPlaybackRecovery()
     m.video.control = "stop"
     m.errorDialog.visible = false
     m.top.exitRequested = not m.top.exitRequested

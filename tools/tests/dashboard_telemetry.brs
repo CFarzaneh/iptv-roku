@@ -44,6 +44,15 @@ sub main()
     check(not m.dashboardPlayingSegmentKnown, "new tune enables download fallback again")
     onDashboardSegment(event)
     check(m.dashboardMetric.width = 1920, "new channel reports its own resolution")
+    m.top.dashboardCommandId = "remote-tune"
+    dashboardBeginTune({providerStreamId: "123"})
+    check(m.dashboardCommand = "remote-tune", "remote tune captured")
+    m.top.dashboardCommandId = "next-remote-tune"
+    dashboardBeginTune({providerStreamId: "123"}, true)
+    check(m.dashboardCommand = "remote-tune", "automatic recovery preserves command acknowledgment")
+    check(m.top.dashboardCommandId = "next-remote-tune", "recovery cannot consume a newer command")
+    dashboardBeginTune({providerStreamId: "456"})
+    check(m.dashboardCommand = "next-remote-tune", "manual tune consumes its own command")
     print "Dashboard telemetry checks passed"
 end sub
 
