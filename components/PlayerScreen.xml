@@ -8,6 +8,8 @@
     <script type="text/brightscript" uri="pkg:/components/PlayerTelemetry.brs" />
     <script type="text/brightscript" uri="pkg:/source/PlaybackRecovery.brs" />
     <script type="text/brightscript" uri="pkg:/components/PlayerRecovery.brs" />
+    <script type="text/brightscript" uri="pkg:/components/PlayerResolution.brs" />
+    <script type="text/brightscript" uri="pkg:/source/ResolutionPolicy.brs" />
     <interface>
         <field id="dashboardCommandId" type="string" />
         <field id="dashboardSnapshot" type="assocarray" alwaysNotify="true" />

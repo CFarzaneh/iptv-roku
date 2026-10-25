@@ -278,6 +278,7 @@ sub startAudioRepair(idx as integer)
         m.audioRepairTask.listenPort = m.audioRepairPort
         m.audioRepairTask.transformMode = "aac-main-to-lc"
         m.audioRepairTask.observeField("status", "onAudioRepairStatus")
+        m.audioRepairTask.observeField("videoDimensions", "onAudioRepairDimensions")
         m.audioRepairTask.sourceUrl = channel.url
         m.audioRepairTask.control = "RUN"
     else
@@ -307,6 +308,7 @@ sub playPendingAudioRepair()
     if m.top.playlist = invalid or idx >= m.top.playlist.Count() then return
     channel = m.top.playlist[idx]
     m.audioRepairTask.sourceUrl = channel.url
+    applyAudioRepairDimensions(m.audioRepairTask.videoDimensions)
     m.audioRepairSession = m.audioRepairSession + 1
     localUrl = "http://127.0.0.1:" + m.audioRepairPort.ToStr().Trim() + "/proxy.m3u8?session=" + m.audioRepairSession.ToStr().Trim()
     m.audioRepairPendingIndex = -1

@@ -14,6 +14,7 @@ sub initDashboardTelemetry()
     m.dashboardLastSegment = ""
     m.dashboardPlayingSegmentKnown = false
     m.dashboardDimensionReports = {}
+    resetResolutionFallback()
     m.video.observeField("downloadedSegment", "onDashboardSegment")
     m.video.observeField("streamingSegment", "onDashboardStreamingSegment")
     m.top.findNode("telemetryTimer").observeField("fire", "onDashboardTelemetryTick")
@@ -21,6 +22,7 @@ sub initDashboardTelemetry()
 end sub
 
 sub dashboardBeginTune(channel as object, preserveCommand = false as boolean)
+    resetResolutionFallback()
     m.dashboardRevision = m.dashboardRevision + 1
     if not preserveCommand
         m.dashboardCommand = m.top.dashboardCommandId
@@ -71,6 +73,7 @@ sub onDashboardSegment(event as object)
     m.dashboardSessionBytes = m.dashboardSessionBytes + segment.SegSize
     m.dashboardTuneBytes = m.dashboardTuneBytes + segment.SegSize
     m.dashboardRateBytes = m.dashboardRateBytes + segment.SegSize
+    maybeInspectResolution(segment)
 end sub
 
 sub onDashboardStreamingSegment(event as object)
@@ -97,6 +100,7 @@ sub onDashboardTelemetryTick()
         quality = dashboardVideoMetrics(segment)
         if quality.width <> invalid then m.dashboardPlayingSegmentKnown = true
         dashboardApplyVideoMetrics(segment)
+        maybeInspectResolution(segment)
     end if
     elapsed = (Uptime(0) - m.dashboardRateStarted) * 1000.0
     if elapsed >= 1000 and m.dashboardBytesKnown

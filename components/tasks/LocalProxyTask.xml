@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="LocalProxyTask" extends="Task">
     <script type="text/brightscript" uri="pkg:/components/tasks/LocalProxyTask.brs" />
+    <script type="text/brightscript" uri="pkg:/source/ResolutionParser.brs" />
     <interface>
         <field id="listenPort" type="integer" />
         <field id="sourceUrl" type="string" />
@@ -10,5 +11,6 @@
         <field id="requestCount" type="integer" />
         <field id="lastRequest" type="string" />
         <field id="lastEvent" type="string" />
+        <field id="videoDimensions" type="assocarray" alwaysNotify="true" />
     </interface>
 </component>

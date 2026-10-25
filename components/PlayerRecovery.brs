@@ -16,6 +16,7 @@ end sub
 
 sub cancelPlaybackRecovery()
     recoveryCancel(m.recovery)
+    cancelResolutionFallback()
     m.recoveryTimer.control = "stop"
     m.audioRepairPendingIndex = -1
 end sub

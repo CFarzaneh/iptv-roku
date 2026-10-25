@@ -11,10 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = [
     (["source/PlaybackRecovery.brs", "tools/tests/playback_recovery.brs"],
      "Playback recovery checks passed:"),
-    (["source/PlaybackRecovery.brs", "components/PlayerRecovery.brs", "tools/tests/player_recovery.brs"],
+    (["source/PlaybackRecovery.brs", "components/PlayerRecovery.brs", "components/PlayerResolution.brs", "source/ResolutionPolicy.brs", "tools/tests/player_recovery.brs"],
      "Player recovery controller checks passed:"),
-    (["source/DashboardModel.brs", "components/PlayerTelemetry.brs", "tools/tests/dashboard_telemetry.brs"],
+    (["source/DashboardModel.brs", "components/PlayerTelemetry.brs", "components/PlayerResolution.brs", "source/ResolutionPolicy.brs", "tools/tests/dashboard_telemetry.brs"],
      "Dashboard telemetry checks passed"),
+    (["source/ResolutionParser.brs", "source/ResolutionPolicy.brs", "tools/tests/resolution_parser.brs"],
+     "Resolution parser checks passed:"),
+    (["source/DashboardModel.brs", "components/PlayerResolution.brs", "source/ResolutionPolicy.brs", "tools/tests/player_resolution.brs"],
+     "Player resolution checks passed:"),
 ]
 
 

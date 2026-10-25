@@ -212,6 +212,7 @@ function urlOrigin(url as string) as string
 end function
 
 function fetchRelaySegment(segmentId as string) as object
+    sourceUrl = m.top.sourceUrl
     body = CreateObject("roByteArray")
     if segmentId = "" or not m.segmentUrls.DoesExist(segmentId)
         body.FromAsciiString("unknown segment")
@@ -230,6 +231,20 @@ function fetchRelaySegment(segmentId as string) as object
         return { code: 502, contentType: "text/plain", body: body }
     end if
     DeleteFile(tempPath)
+    if m.resolutionSource <> sourceUrl
+        m.resolutionSource = sourceUrl
+        m.resolutionSamples = 0
+        m.resolutionFound = false
+    end if
+    if not m.resolutionFound and m.resolutionSamples < 2
+        m.resolutionSamples = m.resolutionSamples + 1
+        dimensions = resolutionFromBytes(body)
+        if dimensions.width <> invalid
+            dimensions.sourceUrl = sourceUrl
+            m.top.videoDimensions = dimensions
+            m.resolutionFound = true
+        end if
+    end if
     if m.top.transformMode = "aac-main-to-lc"
         transform = relabelAacMainToLc(body)
         noteEvent("AAC headers pid=" + transform.pid.ToStr().Trim() + " frames=" + transform.frames.ToStr().Trim() + " changed=" + transform.changed.ToStr().Trim())
