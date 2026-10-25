@@ -28,6 +28,13 @@ sub main()
     check(m.dashboardMetric.width = invalid and m.published = 0, "exit discards late completion")
 
     resetPlayer()
+    unavailable = {GetData: function() as object
+        return {revision: 9}
+    end function}
+    onResolutionInspected(unavailable)
+    check(m.recovery.active and m.resolutionTask = invalid and m.dashboardMetric.width = invalid, "unavailable sample leaves playback active and frees task")
+
+    resetPlayer()
     task = m.resolutionTask
     resetResolutionFallback()
     check(task.cancel and m.resolutionTask = invalid and m.resolutionAttempts = 0, "tune cancellation and budget reset")

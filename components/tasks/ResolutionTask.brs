@@ -53,8 +53,7 @@ function readResolutionPrefix() as object
                 complete = true
                 exit while
             end if
-            stat = fs.Stat(path)
-            if stat <> invalid and stat.size >= 131072
+            if resolutionPrefixLength(fs.Stat(path)) >= 131072
                 ' A segment server may ignore Range. Cancel once enough bytes
                 ' arrive; parsing/file reads stay capped at 128 KiB.
                 usable = true
@@ -63,11 +62,9 @@ function readResolutionPrefix() as object
         end while
         if not complete then req.AsyncCancel()
         if usable and not m.top.cancel
-            stat = fs.Stat(path)
-            if stat <> invalid and stat.size > 0
-                length = stat.size
-                if length > 131072 then length = 131072
-                bytes.ReadFile(path, 0, length)
+            length = resolutionPrefixLength(fs.Stat(path))
+            if length > 0
+                if not bytes.ReadFile(path, 0, length) then bytes.Clear()
             end if
         end if
     end if

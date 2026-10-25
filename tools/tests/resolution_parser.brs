@@ -22,6 +22,18 @@ sub main()
     check(not resolutionSafeSegment("http://example.com/chunk.ts", "http://example.com/chunk.ts"), "never reopen channel entry")
     check(not resolutionSafeSegment("file:///tmp/secret.ts", ""), "local files not probed")
     check(not resolutionSafeSegment("https://example.com/channel.m3u8", ""), "channel playlists not probed")
+    check(resolutionPrefixLength(invalid) = 0, "file not available")
+    check(resolutionPrefixLength({}) = 0, "empty Stat before async file creation")
+    check(resolutionPrefixLength({type: "file"}) = 0, "Stat without size")
+    check(resolutionPrefixLength({size: invalid}) = 0, "invalid Stat size")
+    check(resolutionPrefixLength({size: "131072"}) = 0, "nonnumeric Stat size")
+    check(resolutionPrefixLength({size: 0}) = 0, "empty file still downloading")
+    check(resolutionPrefixLength({size: -1}) = 0, "invalid negative size")
+    check(resolutionPrefixLength({size: 188}) = 188, "partial file size")
+    check(resolutionPrefixLength({size: 131072}) = 131072, "prefix ready")
+    check(resolutionPrefixLength({size: 900000}) = 131072, "ignored Range still caps file read")
+    boxedSize = CreateObject("roInt"): boxedSize.SetInt(131072)
+    check(resolutionPrefixLength({size: boxedSize}) = 131072, "native boxed file size")
     print "Resolution parser checks passed: "; m.checks
 end sub
 
