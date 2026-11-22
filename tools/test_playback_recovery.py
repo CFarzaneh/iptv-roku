@@ -19,6 +19,12 @@ CASES = [
      "Resolution parser checks passed:"),
     (["source/DashboardModel.brs", "components/PlayerResolution.brs", "source/ResolutionPolicy.brs", "tools/tests/player_resolution.brs"],
      "Player resolution checks passed:"),
+    (["source/OnDemandModel.brs", "source/OnDemandStore.brs", "source/DashboardModel.brs",
+      "components/tasks/OnDemandTask.brs", "components/PlayerOnDemand.brs", "tools/tests/on_demand.brs"],
+     "On-demand checks passed"),
+    (["source/PlaybackRecovery.brs", "source/OnDemandStore.brs", "components/PlayerRecovery.brs",
+      "components/PlayerResolution.brs", "components/PlayerOnDemand.brs", "components/PlayerScreen.brs",
+      "tools/tests/player_vod_end.brs"], "Movie completion check passed"),
 ]
 
 

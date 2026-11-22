@@ -54,6 +54,7 @@ sub onPlaybackRecoveryTick()
         playIndex(m.currentIndex, true)
         return
     end if
+    if m.isVod = true and state = "finished" then return
     reason = recoveryStallReason(m.recovery, state, now)
     if reason = "" then return
     m.lastPlaybackError = "The live stream ended unexpectedly."
@@ -66,6 +67,7 @@ sub onPlaybackRecoveryTick()
 end sub
 
 sub failPlaybackRecovery()
+    if m.isVod = true then saveOnDemandCheckpoint()
     cancelPlaybackRecovery()
     m.video.control = "stop"
     m.spinner.visible = false

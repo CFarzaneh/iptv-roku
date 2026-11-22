@@ -67,11 +67,17 @@ sub main()
     m.video.state = "finished"
     onPlaybackRecoveryTick()
     check(m.recovery.pending, "unexpected live end recovers even before first frame")
+    resetPlayer()
+    m.video.state = "finished"
+    m.isVod = true
+    onPlaybackRecoveryTick()
+    check(not m.recovery.pending and m.playCalls = 0, "movie completion never queues a live-end retry")
     print "Player recovery controller checks passed: "; m.checks
 end sub
 
 sub resetPlayer()
     m.now = 0
+    m.isVod = false
     m.recovery = newPlaybackRecovery(0)
     m.recoveryTimer = {control: "start"}
     m.video = {state: "error", position: 0, control: "play", errorCode: -1, errorInfo: {category: "http"}}

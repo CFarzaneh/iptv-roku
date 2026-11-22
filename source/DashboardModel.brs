@@ -102,6 +102,9 @@ function dashboardWire(value as dynamic) as dynamic
 end function
 
 function dashboardChannelId(channel as object) as string
+    if channel.mediaKind <> invalid and channel.mediaId <> invalid
+        return dashboardText(channel.mediaKind) + ":" + dashboardText(channel.mediaId)
+    end if
     if channel.providerStreamId <> invalid then return dashboardText(channel.providerStreamId)
     return dashboardText(channel.dashboardId)
 end function

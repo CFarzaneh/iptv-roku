@@ -7,6 +7,9 @@
         <field id="logo" type="string" />
         <field id="compatible" type="boolean" />
         <field id="favorite" type="boolean" />
+        <field id="mediaKind" type="string" />
+        <field id="mediaYear" type="string" />
+        <field id="mediaDescription" type="string" />
         <field id="wide" type="boolean" />
     </interface>
 </component>

@@ -10,6 +10,8 @@ sub init()
     
     m.channelsScreen = m.top.findNode("channelsScreen")
     m.playerScreen = m.top.findNode("playerScreen")
+    m.moviesScreen = m.top.findNode("moviesScreen")
+    m.movieSearchScreen = m.top.findNode("movieSearchScreen")
     m.searchScreen = m.top.findNode("searchScreen")
     m.settingsScreen = m.top.findNode("settingsScreen")
     
@@ -24,6 +26,12 @@ sub init()
     m.channelsScreen.observeField("openSettings", "onOpenSettings")
     m.channelsScreen.observeField("catalogUpdate", "onCatalogUpdate")
     
+    m.channelsScreen.observeField("switchCatalog", "onOpenMovies")
+    m.moviesScreen.observeField("switchCatalog", "onExitMovies")
+    m.moviesScreen.observeField("openSearch", "onOpenMovieSearch")
+    m.moviesScreen.observeField("playRequest", "onPlayRequest")
+    m.movieSearchScreen.observeField("playRequest", "onPlayRequest")
+    m.movieSearchScreen.observeField("exitRequested", "onExitMovieSearch")
     m.playerScreen.observeField("exitRequested", "onPlayerExit")
     
     m.searchScreen.observeField("exitRequested", "onChildScreenExit")
@@ -178,6 +186,8 @@ sub hideAllScreens()
     m.playerScreen.visible = false
     m.searchScreen.visible = false
     m.settingsScreen.visible = false
+    m.moviesScreen.visible = false
+    m.movieSearchScreen.visible = false
     m.onboardingGroup.visible = false
 end sub
 
@@ -286,8 +296,15 @@ end sub
 sub onPlayRequest(event as object)
     req = event.getData()
     if req <> invalid and req.channels <> invalid
+        m.playerReturnScreen = "live"
+        if m.movieSearchScreen.visible
+            m.playerReturnScreen = "movieSearch"
+        else if m.moviesScreen.visible
+            m.playerReturnScreen = "movies"
+        end if
         if m.epgAutomatic and req.index <> invalid and req.index >= 0 and req.index < req.channels.Count()
-            queueProviderEpg([req.channels[req.index]])
+            item = req.channels[req.index]
+            if not isOnDemand(item) then queueProviderEpg([item])
         end if
         hideAllScreens()
         m.playerScreen.visible = true
@@ -301,9 +318,66 @@ sub onPlayRequest(event as object)
 end sub
 
 sub onPlayerExit()
+    if m.playerReturnScreen = "movieSearch"
+        hideAllScreens()
+        m.movieSearchScreen.visible = true
+    else if m.playerReturnScreen = "movies"
+        onExitMovieSearch()
+    else
+        onChildScreenExit()
+    end if
+end sub
+
+sub onOpenMovies()
+    if m.playlistResultCache = invalid or m.configCache = invalid then return
+    if m.playlistResultCache.providerMode <> true or m.configCache.xtream = invalid then return
+    if m.moviesScreen.playlistResult <> invalid
+        onExitMovieSearch()
+        return
+    end if
+    showLoading("Loading movie categories…")
+    m.top.setFocus(true)
+    m.movieCatalogTask = CreateObject("roSGNode", "OnDemandTask")
+    m.movieCatalogTask.accountConfig = m.configCache.xtream
+    m.movieCatalogTask.observeField("status", "onMovieCatalogStatus")
+    m.movieCatalogTask.control = "RUN"
+end sub
+
+sub onMovieCatalogStatus(event as object)
+    if m.movieCatalogTask = invalid then return
+    if not m.movieCatalogTask.isSameNode(event.getRoSGNode()) then return
+    status = m.movieCatalogTask.status
+    if status <> "ok" and status <> "error" then return
+    task = m.movieCatalogTask
+    m.movieCatalogTask = invalid
+    if status = "error"
+        onExitMovies()
+        showNotice(task.error)
+        return
+    end if
     hideAllScreens()
-    m.channelsScreen.visible = true
-    m.channelsScreen.restoreFocus = not m.channelsScreen.restoreFocus
+    m.moviesScreen.visible = true
+    m.moviesScreen.accountConfig = m.configCache.xtream
+    m.moviesScreen.playlistResult = task.result
+end sub
+
+sub onExitMovies()
+    if m.movieCatalogTask <> invalid then m.movieCatalogTask.unobserveField("status")
+    m.movieCatalogTask = invalid
+    onChildScreenExit()
+end sub
+
+sub onOpenMovieSearch()
+    m.movieSearchScreen.providerMode = true
+    m.movieSearchScreen.accountConfig = m.configCache.xtream
+    hideAllScreens()
+    m.movieSearchScreen.visible = true
+end sub
+
+sub onExitMovieSearch()
+    hideAllScreens()
+    m.moviesScreen.visible = true
+    m.moviesScreen.restoreFocus = not m.moviesScreen.restoreFocus
 end sub
 
 sub onOpenSearch()
@@ -555,6 +629,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
                     m.onboardingDraft = ""
                 end if
                 showOnboarding()
+                handled = true
+            else if m.moviesScreen.visible or m.movieCatalogTask <> invalid
+                onExitMovies()
                 handled = true
             else if m.channelsScreen.visible
                 showExitConfirmation()

@@ -37,6 +37,10 @@ end sub
 
 sub onVisibleChange()
     if not m.top.visible then return
+    if m.top.catalogKind = "movie"
+        m.titleLabel.text = "SEARCH MOVIES"
+        if m.searchDraft = "" then setSearchButtonText("Search movies")
+    end if
     if hasSearchResults()
         m.channelGrid.setFocus(true)
     else
@@ -74,6 +78,7 @@ sub onSearchButtonSelected()
     end if
     dialog = CreateObject("roSGNode", "StandardKeyboardDialog")
     dialog.title = "Search live channels"
+    if m.top.catalogKind = "movie" then dialog.title = "Search movies"
     dialog.buttons = ["Search", "Cancel"]
     dialog.text = m.searchDraft
     dialog.textEditBox.maxTextLength = 120
@@ -126,11 +131,16 @@ sub startSearch(query as string)
     m.statusLabel.visible = true
 
     if m.top.providerMode = true and m.top.accountConfig <> invalid
-        m.statusLabel.text = "Searching all live channels…"
-        m.providerTask = CreateObject("roSGNode", "XtreamTask")
+        if m.top.catalogKind = "movie"
+            m.statusLabel.text = "Searching movies…"
+            m.providerTask = CreateObject("roSGNode", "OnDemandTask")
+        else
+            m.statusLabel.text = "Searching all live channels…"
+            m.providerTask = CreateObject("roSGNode", "XtreamTask")
+            m.providerTask.playlistUrl = "xtream://configured-account"
+        end if
         m.providerTask.accountConfig = m.top.accountConfig
         m.providerTask.searchQuery = query
-        m.providerTask.playlistUrl = "xtream://configured-account"
         m.providerTask.observeField("status", "onProviderSearchStatus")
         m.providerTask.control = "RUN"
     else
@@ -138,8 +148,9 @@ sub startSearch(query as string)
     end if
 end sub
 
-sub onProviderSearchStatus()
+sub onProviderSearchStatus(event as object)
     if m.providerTask = invalid then return
+    if not m.providerTask.isSameNode(event.getRoSGNode()) then return
     status = m.providerTask.status
     if status <> "ok" and status <> "cache" and status <> "error" then return
 
@@ -175,7 +186,8 @@ sub performLocalSearch(query as string)
 end sub
 
 sub renderResults(query as string, channels as object, totalMatches as integer)
-    favs = LoadFavorites()
+    favs = []
+    if m.top.catalogKind <> "movie" then favs = LoadFavorites()
     gridContent = CreateObject("roSGNode", "ContentNode")
     m.currentChannels = []
     for each ch in channels
@@ -203,12 +215,12 @@ sub renderResults(query as string, channels as object, totalMatches as integer)
         end if
         m.statusLabel.visible = false
         m.channelGrid.jumpToItem = 0
-        m.channelGrid.setFocus(true)
+        if m.top.visible then m.channelGrid.setFocus(true)
     else
         m.headerLabel.text = "Found: 0"
         m.statusLabel.visible = true
         m.statusLabel.text = "Nothing found"
-        m.searchButton.setFocus(true)
+        if m.top.visible then m.searchButton.setFocus(true)
     end if
 end sub
 
@@ -216,7 +228,7 @@ sub showSearchError(reason as string)
     m.headerLabel.text = "Search unavailable"
     m.statusLabel.visible = true
     m.statusLabel.text = reason
-    m.searchButton.setFocus(true)
+    if m.top.visible then m.searchButton.setFocus(true)
 end sub
 
 sub addChannel(parent as object, ch as object, isFav as boolean)
@@ -230,6 +242,11 @@ sub addChannel(parent as object, ch as object, isFav as boolean)
     item.compatible = ch.compatible
     item.favorite = isFav
     item.wide = true
+    if ch.mediaKind <> invalid
+        item.mediaKind = ch.mediaKind
+        item.mediaYear = ch.year
+        item.mediaDescription = ch.description
+    end if
 end sub
 
 sub onChannelSelected()
@@ -259,7 +276,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     else if key = "up" and m.channelGrid.hasFocus() and m.channelGrid.itemFocused = 0
         m.searchButton.setFocus(true)
         return true
-    else if key = "options" and m.channelGrid.hasFocus()
+    else if key = "options" and m.top.catalogKind <> "movie" and m.channelGrid.hasFocus()
         idx = m.channelGrid.itemFocused
         if m.channelGrid.content <> invalid
             item = m.channelGrid.content.getChild(idx)

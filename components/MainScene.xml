@@ -4,6 +4,7 @@
     <script type="text/brightscript" uri="pkg:/source/Theme.brs" />
     <script type="text/brightscript" uri="pkg:/source/DashboardModel.brs" />
     <script type="text/brightscript" uri="pkg:/components/DashboardBridge.brs" />
+    <script type="text/brightscript" uri="pkg:/source/OnDemandModel.brs" />
     <interface>
         <field id="exitApp" type="boolean" />
     </interface>
@@ -75,10 +76,12 @@
                    
             <!-- Main Content -->
             <ChannelsScreen id="channelsScreen" visible="false" />
+            <ChannelsScreen id="moviesScreen" catalogKind="movie" visible="false" />
             <PlayerScreen id="playerScreen" visible="false" />
             
             <!-- Search and Settings -->
             <SearchScreen id="searchScreen" visible="false" />
+            <SearchScreen id="movieSearchScreen" catalogKind="movie" visible="false" />
             <SettingsScreen id="settingsScreen" visible="false" />
             
             <!-- Onboarding -->

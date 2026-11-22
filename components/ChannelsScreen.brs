@@ -86,20 +86,43 @@ sub refreshFavState(dropRecent as boolean)
     end for
 end sub
 
-function headerForCategory(idx as integer) as string
-    if idx = 1 then return "CHANNELS — Favorites"
-    if idx = 2 then return "CHANNELS — Recent"
-    res = m.top.playlistResult
-    catIndex = idx - 3
-    if res <> invalid and res.categories <> invalid and catIndex >= 0 and catIndex < res.categories.Count()
-        cat = res.categories[catIndex]
-        if cat.count > 0 then return "CHANNELS — " + cat.title + " (" + cat.count.ToStr() + ")"
-        return "CHANNELS — " + cat.title
-    end if
+function categoryStart() as integer
+    if m.top.catalogKind = "movie" then return 2
+    result = m.top.playlistResult
+    if result <> invalid and result.providerMode = true then return 4
+    return 3
+end function
+
+function catalogHeading() as string
+    if m.top.catalogKind = "movie" then return "MOVIES"
     return "CHANNELS"
 end function
 
+function isCatalogSwitch(idx as integer) as boolean
+    if m.top.catalogKind = "movie" then return idx = 0
+    return idx = 3 and categoryStart() = 4
+end function
+
+function isCatalogSearch(idx as integer) as boolean
+    if m.top.catalogKind = "movie" then return idx = 1
+    return idx = 0
+end function
+
+function headerForCategory(idx as integer) as string
+    if idx = 1 and m.top.catalogKind <> "movie" then return "CHANNELS — Favorites"
+    if idx = 2 and m.top.catalogKind <> "movie" then return "CHANNELS — Recent"
+    res = m.top.playlistResult
+    catIndex = idx - categoryStart()
+    if res <> invalid and res.categories <> invalid and catIndex >= 0 and catIndex < res.categories.Count()
+        cat = res.categories[catIndex]
+        if cat.count > 0 then return catalogHeading() + " — " + cat.title + " (" + cat.count.ToStr() + ")"
+        return catalogHeading() + " — " + cat.title
+    end if
+    return catalogHeading()
+end function
+
 function emptyTextForCategory(idx as integer) as string
+    if m.top.catalogKind = "movie" then return "No movies found"
     if idx = 1 then return "No favorites yet"
     if idx = 2 then return "Nothing watched yet"
     return "Nothing found"
@@ -137,7 +160,7 @@ function buildGridForCategory(idx as integer) as object
             end for
         end if
     else ' Regular category ("All" or others)
-        catIndex = idx - 3
+        catIndex = idx - categoryStart()
         if catIndex >= 0 and res.categories <> invalid and catIndex < res.categories.Count()
             cat = res.categories[catIndex]
             if availableChannels <> invalid
@@ -159,6 +182,7 @@ sub onPlaylistChange()
     
     m.knownChannels = []
     m.knownChannelUrls = {}
+    if m.providerTask <> invalid then m.providerTask.unobserveField("status")
     m.providerTask = invalid
     m.providerLoading = false
     m.providerCategoryIndex = -1
@@ -172,15 +196,24 @@ sub onPlaylistChange()
     end if
     ' Viewing history stays in the registry; do not print it to the console.
     
+    m.gridFocusMemory = {}
+    m.currentCategoryIdx = -1
+    m.pendingIdx = -1
+    m.gridDebounceTimer.control = "stop"
     buildCategories()
     clearGridCache()
     rebuildFavSet()
     
     m.categoryList.setFocus(true)
-    ' Default to "Favorites" which is index 1
-    if m.categoryList.content <> invalid and m.categoryList.content.getChildCount() > 1
-        m.categoryList.jumpToItem = 1
+    initialIndex = 1
+    if m.top.catalogKind = "movie"
+        m.top.findNode("nameColumnLabel").text = "TITLE"
+        m.top.findNode("detailColumnLabel").text = "DETAILS"
+        initialIndex = 2
+        if res.categories.Count() = 0 then initialIndex = 0
     end if
+    m.categoryList.jumpToItem = initialIndex
+    updateGridForCategory(initialIndex)
 end sub
 
 sub buildCategories()
@@ -197,9 +230,15 @@ sub buildCategories()
     
     content = CreateObject("roSGNode", "ContentNode")
     
-    addCategory(content, "Search")
-    addCategory(content, "★ Favorites (" + favCount.ToStr() + ")")
-    addCategory(content, "Recent (" + recCount.ToStr() + ")")
+    if m.top.catalogKind = "movie"
+        addCategory(content, "‹ Live TV")
+        addCategory(content, "Search movies")
+    else
+        addCategory(content, "Search")
+        addCategory(content, "★ Favorites (" + favCount.ToStr() + ")")
+        addCategory(content, "Recent (" + recCount.ToStr() + ")")
+        if res.providerMode = true then addCategory(content, "Movies")
+    end if
     
     if res.categories <> invalid
         for each cat in res.categories
@@ -209,7 +248,7 @@ sub buildCategories()
         end for
     end if
     
-    addCategory(content, "Settings")
+    if m.top.catalogKind <> "movie" then addCategory(content, "Settings")
     
     m.categoryList.content = content
 end sub
@@ -260,13 +299,15 @@ end sub
 
 sub onCategorySelected()
     idx = m.categoryList.itemSelected
-    if idx = 0
+    if isCatalogSwitch(idx)
+        m.top.switchCatalog = not m.top.switchCatalog
+    else if isCatalogSearch(idx)
         m.top.openSearch = not m.top.openSearch
-    else if m.categoryList.content <> invalid and idx = m.categoryList.content.getChildCount() - 1
+    else if m.top.catalogKind <> "movie" and m.categoryList.content <> invalid and idx = m.categoryList.content.getChildCount() - 1
         m.top.openSettings = not m.top.openSettings
     else
         res = m.top.playlistResult
-        catIndex = idx - 3
+        catIndex = idx - categoryStart()
         if res <> invalid and res.providerMode = true and res.categories <> invalid
             if catIndex >= 0 and catIndex < res.categories.Count()
                 key = idx.ToStr()
@@ -288,18 +329,18 @@ sub updateGridForCategory(idx as integer)
     if m.categoryList.content = invalid then return
     lastIdx = m.categoryList.content.getChildCount() - 1
 
-    ' Search / Settings — empty grid (cheap, not cached)
-    if idx = 0 or idx = lastIdx
+    if isCatalogSearch(idx) or isCatalogSwitch(idx) or (m.top.catalogKind <> "movie" and idx = lastIdx)
         m.channelGrid.content = CreateObject("roSGNode", "ContentNode")
         m.currentChannels = []
         m.emptyLabel.visible = true
         m.emptyLabel.text = "Select to open"
-        m.headerLabel.text = "CHANNELS — " + m.categoryList.content.getChild(idx).title
+        m.headerLabel.text = catalogHeading()
+        if m.top.catalogKind = "movie" and idx = 0 and m.top.playlistResult.categories.Count() = 0 then m.emptyLabel.text = "No movie categories. Use Search movies to find a title."
         return
     end if
 
     res = m.top.playlistResult
-    if res <> invalid and res.providerMode = true and idx >= 3
+    if res <> invalid and res.providerMode = true and idx >= categoryStart()
         key = idx.ToStr()
         if not m.gridCache.DoesExist(key)
             m.channelGrid.content = CreateObject("roSGNode", "ContentNode")
@@ -358,17 +399,22 @@ sub loadProviderCategory(idx as integer, cat as object)
     m.emptyLabel.visible = true
     m.emptyLabel.text = "Loading " + cat.title + "…"
 
-    m.providerTask = CreateObject("roSGNode", "XtreamTask")
+    if m.top.catalogKind = "movie"
+        m.providerTask = CreateObject("roSGNode", "OnDemandTask")
+    else
+        m.providerTask = CreateObject("roSGNode", "XtreamTask")
+        m.providerTask.playlistUrl = "xtream://configured-account"
+    end if
     m.providerTask.accountConfig = m.top.accountConfig
     m.providerTask.categoryId = cat.providerId
     m.providerTask.categoryName = cat.title
-    m.providerTask.playlistUrl = "xtream://configured-account"
     m.providerTask.observeField("status", "onProviderCategoryStatus")
     m.providerTask.control = "RUN"
 end sub
 
-sub onProviderCategoryStatus()
+sub onProviderCategoryStatus(event as object)
     if m.providerTask = invalid then return
+    if not m.providerTask.isSameNode(event.getRoSGNode()) then return
     status = m.providerTask.status
     if status <> "ok" and status <> "cache" and status <> "error" then return
 
@@ -379,24 +425,31 @@ sub onProviderCategoryStatus()
             gridContent = CreateObject("roSGNode", "ContentNode")
             channels = []
             for each ch in result.channels
-                addChannel(gridContent, ch, (m.favSet[ch.name] <> invalid))
+                addChannel(gridContent, ch, (m.top.catalogKind <> "movie" and m.favSet[ch.name] <> invalid))
                 channels.Push(ch)
             end for
             key = idx.ToStr()
+            if m.top.catalogKind = "movie" then clearGridCache()
             m.gridCache[key] = gridContent
             m.channelsCache[key] = channels
-            addKnownChannels(channels)
 
             res = m.top.playlistResult
-            catIndex = idx - 3
+            catIndex = idx - categoryStart()
             if res <> invalid and res.categories <> invalid and catIndex >= 0 and catIndex < res.categories.Count()
                 res.categories[catIndex].count = channels.Count()
                 node = m.categoryList.content.getChild(idx)
                 if node <> invalid
-                    node.title = res.categories[catIndex].title + " (" + channels.Count().ToStr() + ")"
+                    countText = channels.Count().ToStr()
+                    if result.totalMatches <> invalid
+                        if result.totalMatches > channels.Count() then countText = countText + "+"
+                    end if
+                    node.title = res.categories[catIndex].title + " (" + countText + ")"
                 end if
             end if
-            m.top.catalogUpdate = { channels: m.knownChannels, newChannels: channels }
+            if m.top.catalogKind <> "movie"
+                addKnownChannels(channels)
+                m.top.catalogUpdate = { channels: m.knownChannels, newChannels: channels }
+            end if
         end if
     else
         reason = m.providerTask.error
@@ -407,6 +460,7 @@ sub onProviderCategoryStatus()
     m.providerLoading = false
     m.providerCategoryIndex = -1
     m.providerTask = invalid
+    if not m.top.visible or m.categoryList.itemFocused <> idx then return
     if status = "ok" or status = "cache"
         updateGridForCategory(idx)
         if m.channelGrid.content <> invalid and m.channelGrid.content.getChildCount() > 0
@@ -439,6 +493,11 @@ sub addChannel(parent as object, ch as object, isFav as boolean)
     item.HDPosterUrl = ch.logo
     item.compatible = ch.compatible
     item.favorite = isFav
+    if ch.mediaKind <> invalid
+        item.mediaKind = ch.mediaKind
+        item.mediaYear = ch.year
+        item.mediaDescription = ch.description
+    end if
 end sub
 
 sub playFocusedChannel()
@@ -461,6 +520,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
 
     ' Long OK on a card: short = play, long = favorite (add/remove by category)
     if key = "OK" and m.channelGrid.hasFocus()
+        if m.top.catalogKind = "movie"
+            if not press then playFocusedChannel()
+            return true
+        end if
         if press
             m.okLongFired = false
             m.okTimer.control = "stop"
@@ -489,7 +552,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
                 m.categoryList.setFocus(true)
                 handled = true
             end if
-        else if key = "options"
+        else if key = "options" and m.top.catalogKind <> "movie"
             if m.channelGrid.hasFocus()
                 idx = m.channelGrid.itemFocused
                 if m.channelGrid.content <> invalid
@@ -528,8 +591,10 @@ sub hideToast()
 end sub
 
 sub onRestoreFocus()
-    refreshFavState(true)
-    updateCategoryCounts()
+    if m.top.catalogKind <> "movie"
+        refreshFavState(true)
+        updateCategoryCounts()
+    end if
     curIdx = m.currentCategoryIdx
     if curIdx < 0 then curIdx = m.categoryList.itemFocused
     updateGridForCategory(curIdx)

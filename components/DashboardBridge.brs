@@ -231,6 +231,9 @@ sub dashboardTune(command as object)
     end if
     if m.dashboardTuneCommand <> invalid then dashboardReply(m.dashboardTuneCommand, "stale", "STALE")
     m.dashboardTuneCommand = command
+    if m.movieCatalogTask <> invalid then m.movieCatalogTask.unobserveField("status")
+    m.movieCatalogTask = invalid
+    m.playerReturnScreen = "live"
     hideAllScreens()
     m.playerScreen.visible = true
     m.playerScreen.dashboardCommandId = command.commandId

@@ -10,6 +10,9 @@
     <script type="text/brightscript" uri="pkg:/components/PlayerRecovery.brs" />
     <script type="text/brightscript" uri="pkg:/components/PlayerResolution.brs" />
     <script type="text/brightscript" uri="pkg:/source/ResolutionPolicy.brs" />
+    <script type="text/brightscript" uri="pkg:/source/OnDemandModel.brs" />
+    <script type="text/brightscript" uri="pkg:/source/OnDemandStore.brs" />
+    <script type="text/brightscript" uri="pkg:/components/PlayerOnDemand.brs" />
     <interface>
         <field id="dashboardCommandId" type="string" />
         <field id="dashboardSnapshot" type="assocarray" alwaysNotify="true" />
@@ -82,6 +85,10 @@
                    translation="[100, 140]"
                    width="1720" height="30"
                    color="0x8A968EFF" text="" />
+            <Rectangle id="vodProgress" translation="[100, 186]"
+                       width="1720" height="5" color="0xFFFFFF55" visible="false">
+                <Rectangle id="vodProgressFill" width="0" height="5" color="0x57C140FF" />
+            </Rectangle>
         </Rectangle>
         
         <!-- Mini-banner (Zap). Left-anchored on the app's x=96 spine: a centred

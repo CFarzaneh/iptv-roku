@@ -96,6 +96,11 @@ end sub
 
 sub updateGuide()
     if m.top.itemContent = invalid then return
+    if m.top.itemContent.mediaKind <> ""
+        m.nowLabel.text = m.top.itemContent.mediaYear
+        m.nextLabel.text = m.top.itemContent.mediaDescription
+        return
+    end if
     name = m.top.itemContent.title
     if name = invalid or name = "" then name = m.top.itemContent.name
     epgMap = invalid

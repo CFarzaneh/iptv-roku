@@ -11,6 +11,12 @@ Roku Channel Store.
   extra playlists merged in as their own category.
 - **Channels** — two-pane rail + grid, category counts, logo/initials tiles, incompatible
   streams flagged.
+- **Movies** — select Movies in the Live TV rail when configured with an Xtream
+  account. Browse a category or search by title or stream ID, then press OK to
+  play. Play/Pause toggles playback, Left/Right or Rewind/Fast Forward skip 30
+  seconds, and OK shows progress. Movies resume locally on the same Roku and
+  return to the list when they finish. Playback goes directly to the provider
+  and depends on the Roku model supporting the movie's encoding.
 - **Favorites & Recents** — stored by channel name (survives provider domain/token changes);
   toggle with `*` or long-press OK.
 - **Player** — HLS video with an info overlay, channel zap (▲/▼), a side zapper panel,

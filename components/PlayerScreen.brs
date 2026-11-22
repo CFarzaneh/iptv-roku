@@ -83,6 +83,7 @@ sub init()
     m.audioRepairSession = 0
     initDashboardTelemetry()
     initPlaybackRecovery()
+    initOnDemandPlayback()
 end sub
 
 sub addErrorOption(parent as object, title as string)
@@ -94,6 +95,7 @@ sub onPlayCommand()
     if m.top.playlist = invalid or m.top.playlist.Count() = 0 then return
     idx = m.top.startIndex
     if idx = invalid or idx < 0 or idx >= m.top.playlist.Count() then idx = 0
+    saveOnDemandCheckpoint()
     playIndex(idx)
 end sub
 
@@ -104,9 +106,12 @@ sub playIndex(idx as integer, automaticRetry = false as boolean)
     beginPlaybackRecovery(automaticRetry)
     m.currentIndex = idx
     channel = m.top.playlist[idx]
+    beginOnDemandPlayback(channel, automaticRetry)
+    hideOverlay()
+    hideMiniBanner()
     dashboardBeginTune(channel, automaticRetry)
     
-    if not automaticRetry and not IsAdultGroup(channel.group)
+    if not m.isVod and not automaticRetry and not IsAdultGroup(channel.group)
         PushRecent(channel.name)
     end if
     
@@ -120,11 +125,12 @@ sub playIndex(idx as integer, automaticRetry = false as boolean)
     m.loadingLabel.text = "Loading: " + channel.name
     if automaticRetry then m.loadingLabel.text = "Reconnecting…"
 
-    if not automaticRetry then showMiniBanner(channel)
+    if not m.isVod and not automaticRetry then showMiniBanner(channel)
     updateOverlayData(channel)
     if not automaticRetry or not m.zapperPanel.visible then focusPlayer()
 
-    key = audioRepairKey(channel)
+    key = ""
+    if not m.isVod then key = audioRepairKey(channel)
     if key <> "" and m.audioRepairKnown.DoesExist(key)
         print "[MEDIA] using remembered local audio repair"
         startAudioRepair(idx)
@@ -145,7 +151,9 @@ sub playChannelUrl(channel as object, url as string, repaired as boolean)
     else
         node.streamFormat = "hls"
     end if
-    node.live = true
+    node.live = not m.isVod
+    if m.isVod and m.vodPosition > 0 then node.playStart = m.vodPosition
+    m.video.autoplayAfterSeek = true
     ' This provider rejects generic/default clients with HTTP 403, while its API,
     ' browser clients, and a Roku-style User-Agent receive the same HLS playlist.
     ' Put the header on the ContentNode so the Video node applies it to both the
@@ -185,6 +193,7 @@ sub onVideoStateChange()
         m.spinnerAnim.control = "stop"
         m.loadingLabel.visible = false
     else if state = "error"
+        hideOverlay()
         m.spinner.visible = false
         m.spinnerAnim.control = "stop"
         m.loadingLabel.visible = false
@@ -205,6 +214,10 @@ sub onVideoStateChange()
         end if
         return
     else if state = "finished"
+        if m.isVod
+            exitPlayer(true)
+            return
+        end if
         m.lastPlaybackError = "The live stream ended unexpectedly."
         if queuePlaybackRecovery(3, "live-end")
             dashboardObserveState("buffering")
@@ -240,6 +253,7 @@ end function
 
 function channelSupportsAudioRepair(channel as dynamic) as boolean
     if channel = invalid or channel.url = invalid then return false
+    if isOnDemand(channel) then return false
     url = LCase(channel.url.ToStr())
     if not url.StartsWith("http://") and not url.StartsWith("https://") then return false
     ' The local relay rewrites HLS manifests. Do not feed a bare transport stream
@@ -393,6 +407,12 @@ function buildErrorOptions() as object
     addErrorOption(c, "Retry")
     m.errorActions.Push("retry")
 
+    if m.isVod
+        addErrorOption(c, "Back")
+        m.errorActions.Push("back")
+        return c
+    end if
+
     addErrorOption(c, "Next channel")
     m.errorActions.Push("next")
 
@@ -476,8 +496,13 @@ sub showOverlay()
     ' whenever OK is pressed within the banner's few seconds.
     hideMiniBanner()
     m.overlayGroup.visible = true
-    updateClock()
-    m.clockTimer.control = "start"
+    if m.isVod
+        updateOnDemandProgress()
+    else
+        updateClock()
+        m.clockTimer.control = "start"
+    end if
+    m.overlayTimer.control = "stop"
     m.overlayTimer.control = "start"
 end sub
 
@@ -494,6 +519,17 @@ sub updateOverlayData(channel as object)
         m.overlayGroupLabel.text = ""
     end if
     
+    if m.isVod
+        m.overlayName.width = 1150
+        m.overlayTime.translation = [1270, 30]
+        m.overlayTime.width = 530
+        if channel.year <> invalid then m.overlayGroupLabel.text = channel.year
+        m.overlayEpg.text = ""
+        return
+    end if
+    m.overlayName.width = 1400
+    m.overlayTime.translation = [1500, 30]
+    m.overlayTime.width = 300
     info = EpgFind(m.global.epg, channel.name, m.global.nowSec)
     s = ""
     if info.now <> invalid then s = "Now: " + info.now.t + " (" + EpgFmtHM(info.now.s) + "-" + EpgFmtHM(info.now.e) + ")"
@@ -627,7 +663,16 @@ sub zap(stepDelta as integer)
     end for
 end sub
 
-sub exitPlayer()
+sub exitPlayer(completed = false as boolean)
+    if m.isVod
+        if completed
+            writeOnDemandPosition(m.vodKey, 0)
+            m.vodHasPosition = false
+        else
+            saveOnDemandCheckpoint()
+        end if
+    end if
+    hideOverlay()
     cancelPlaybackRecovery()
     m.video.control = "stop"
     m.errorDialog.visible = false
@@ -736,6 +781,8 @@ function onKeyEvent(key as string, press as boolean) as boolean
                 handled = false
             end if
         end if
+    else if m.isVod
+        return handleOnDemandKey(key, press)
     else
         if key = "OK"
             if press
