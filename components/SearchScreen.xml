@@ -6,6 +6,7 @@
     <interface>
         <field id="channels" type="array" onChange="onChannelsChange" />
         <field id="catalogKind" type="string" />
+        <field id="searchCategories" type="array" />
         <field id="providerMode" type="boolean" />
         <field id="accountConfig" type="assocarray" />
         <field id="playRequest" type="assocarray" />

@@ -7,6 +7,9 @@
         <field id="categoryId" type="string" />
         <field id="categoryName" type="string" />
         <field id="searchQuery" type="string" />
+        <field id="searchCategories" type="array" />
+        <field id="searchProgress" type="assocarray" />
+        <field id="cancelRequested" type="boolean" />
         <field id="result" type="assocarray" />
         <field id="status" type="string" />
         <field id="error" type="string" />

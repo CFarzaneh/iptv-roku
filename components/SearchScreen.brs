@@ -36,7 +36,16 @@ sub init()
 end sub
 
 sub onVisibleChange()
-    if not m.top.visible then return
+    if not m.top.visible
+        if m.top.catalogKind = "movie" and m.providerTask <> invalid
+            m.providerTask.unobserveField("searchProgress")
+            m.providerTask.unobserveField("status")
+            m.providerTask.cancelRequested = true
+            m.providerTask = invalid
+            m.statusLabel.visible = false
+        end if
+        return
+    end if
     if m.top.catalogKind = "movie"
         m.titleLabel.text = "SEARCH MOVIES"
         if m.searchDraft = "" then setSearchButtonText("Search movies")
@@ -134,6 +143,8 @@ sub startSearch(query as string)
         if m.top.catalogKind = "movie"
             m.statusLabel.text = "Searching movies…"
             m.providerTask = CreateObject("roSGNode", "OnDemandTask")
+            m.providerTask.searchCategories = m.top.searchCategories
+            m.providerTask.observeField("searchProgress", "onMovieSearchProgress")
         else
             m.statusLabel.text = "Searching all live channels…"
             m.providerTask = CreateObject("roSGNode", "XtreamTask")
@@ -148,6 +159,13 @@ sub startSearch(query as string)
     end if
 end sub
 
+sub onMovieSearchProgress(event as object)
+    if not m.top.visible or m.providerTask = invalid then return
+    if not m.providerTask.isSameNode(event.getRoSGNode()) then return
+    progress = event.getData()
+    m.statusLabel.text = "Searching movie categories " + progress.current.ToStr() + " of " + progress.total.ToStr() + "…"
+end sub
+
 sub onProviderSearchStatus(event as object)
     if m.providerTask = invalid then return
     if not m.providerTask.isSameNode(event.getRoSGNode()) then return
@@ -159,7 +177,8 @@ sub onProviderSearchStatus(event as object)
         if result <> invalid and result.channels <> invalid
             totalMatches = result.channels.Count()
             if result.totalMatches <> invalid then totalMatches = result.totalMatches
-            renderResults(m.searchDraft, result.channels, totalMatches)
+            incomplete = (result.incomplete = true)
+            renderResults(m.searchDraft, result.channels, totalMatches, incomplete)
         else
             showSearchError("Provider returned no search results")
         end if
@@ -185,7 +204,7 @@ sub performLocalSearch(query as string)
     renderResults(query, matches, matches.Count())
 end sub
 
-sub renderResults(query as string, channels as object, totalMatches as integer)
+sub renderResults(query as string, channels as object, totalMatches as integer, incomplete = false as boolean)
     favs = []
     if m.top.catalogKind <> "movie" then favs = LoadFavorites()
     gridContent = CreateObject("roSGNode", "ContentNode")
@@ -213,6 +232,7 @@ sub renderResults(query as string, channels as object, totalMatches as integer)
         else
             m.headerLabel.text = "Found: " + totalMatches.ToStr()
         end if
+        if incomplete then m.headerLabel.text = m.headerLabel.text + " · Some categories unavailable"
         m.statusLabel.visible = false
         m.channelGrid.jumpToItem = 0
         if m.top.visible then m.channelGrid.setFocus(true)
@@ -220,6 +240,7 @@ sub renderResults(query as string, channels as object, totalMatches as integer)
         m.headerLabel.text = "Found: 0"
         m.statusLabel.visible = true
         m.statusLabel.text = "Nothing found"
+        if incomplete then m.statusLabel.text = "No matches in the categories checked. Some categories could not be searched."
         if m.top.visible then m.searchButton.setFocus(true)
     end if
 end sub

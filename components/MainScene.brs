@@ -370,6 +370,7 @@ end sub
 sub onOpenMovieSearch()
     m.movieSearchScreen.providerMode = true
     m.movieSearchScreen.accountConfig = m.configCache.xtream
+    m.movieSearchScreen.searchCategories = m.moviesScreen.playlistResult.categories
     hideAllScreens()
     m.movieSearchScreen.visible = true
 end sub
